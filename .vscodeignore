@@ -8,10 +8,7 @@ vsc-extension-quickstart.md
 **/.eslintrc.json
 **/*.map
 **/*.ts
-!src/types/**/*.d.ts
-node_modules/**
-!node_modules/ai/**
-!node_modules/@ai-sdk/amazon-bedrock/**
+out/**
 scripts/**
 .mocharc.json
 *.vsix
@@ -19,6 +16,15 @@ scripts/**
 test-bedrock.js
 sample-diff.txt
 .env
+webpack.config.js
+node_modules/**
+
+# Keep only necessary files
+!dist/**
+!resources/**
+!package.json
+!README.md
+!LICENSE
 
 # Keep resources for the icon
 !resources/ 
