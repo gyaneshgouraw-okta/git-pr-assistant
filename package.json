@@ -107,6 +107,7 @@
     "test:unit": "mocha --require ts-node/register src/test/suite/**/*.test.ts",
     "test:direct": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/**/*.test.js",
     "test:template": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/templateManager.test.js",
+    "test:bedrock:git": "node test-bedrock.js --git",
     "package": "vsce package",
     "publish": "vsce publish"
   },
@@ -121,6 +122,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "@vscode/vsce": "^2.24.0",
     "chai": "^4.3.7",
+    "dotenv": "^16.4.7",
     "eslint": "^8.57.0",
     "mocha": "^10.2.0",
     "sinon": "^19.0.4",
@@ -129,7 +131,8 @@
     "vscode-test": "^1.6.1"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.772.0"
+    "ai": "^2.0.0",
+    "@ai-sdk/amazon-bedrock": "^2.0.4"
   },
   "publisher": "your-publisher-name",
   "repository": {

@@ -1,38 +1,38 @@
-import { 
-  BedrockRuntimeClient,
-  InvokeModelCommand
-} from '@aws-sdk/client-bedrock-runtime';
+import { bedrock } from '@ai-sdk/amazon-bedrock';
+import { generateText } from 'ai';
 
 /**
- * Service that uses AWS Bedrock (Claude) to generate PR descriptions
+ * Service that uses AWS Bedrock (Claude) via Vercel AI SDK to generate PR descriptions
  */
 export class AIService {
-  private client: BedrockRuntimeClient;
+  private region: string;
+  private accessKeyId: string;
+  private secretAccessKey: string;
+  
+  // List of Claude models to try in order of preference
+  private readonly CLAUDE_MODELS = [
+    'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'anthropic.claude-3-sonnet-20240229-v1:0',
+    'anthropic.claude-3-haiku-20240307-v1:0',
+    'anthropic.claude-instant-v1',
+    'anthropic.claude-v2',
+    'anthropic.claude-v2:1'
+  ];
   
   /**
    * Create a new AIService
    * @param region AWS region
    * @param accessKeyId AWS access key ID
    * @param secretAccessKey AWS secret access key
-   * @param bedrockClient Optional Bedrock client for testing
    */
   constructor(
     region: string,
     accessKeyId: string,
-    secretAccessKey: string,
-    bedrockClient?: BedrockRuntimeClient
+    secretAccessKey: string
   ) {
-    if (bedrockClient) {
-      this.client = bedrockClient;
-    } else {
-      this.client = new BedrockRuntimeClient({
-        region,
-        credentials: {
-          accessKeyId,
-          secretAccessKey
-        }
-      });
-    }
+    this.region = region;
+    this.accessKeyId = accessKeyId;
+    this.secretAccessKey = secretAccessKey;
   }
   
   /**
@@ -42,26 +42,40 @@ export class AIService {
    * @returns The generated PR description
    */
   async generatePRDescription(gitDiff: string, template: string): Promise<string> {
-    try {
-      const prompt = this.createPrompt(gitDiff, template);
-      
-      const command = new InvokeModelCommand({
-        modelId: 'anthropic.claude-v2',
-        body: JSON.stringify({
+    // Set environment variables for AWS Bedrock
+    process.env.AWS_ACCESS_KEY_ID = this.accessKeyId;
+    process.env.AWS_SECRET_ACCESS_KEY = this.secretAccessKey;
+    process.env.AWS_REGION = this.region;
+    
+    // Create the prompt for the AI model
+    const prompt = this.createPrompt(gitDiff, template);
+    
+    // Try each Claude model until one works
+    let lastError: Error | null = null;
+    
+    for (const modelId of this.CLAUDE_MODELS) {
+      try {
+        console.log(`Trying to generate PR description with model: ${modelId}`);
+        
+        // Call Claude model through Vercel AI SDK
+        const result = await generateText({
+          model: bedrock(modelId),
           prompt: prompt,
-          max_tokens_to_sample: 2000,
+          maxTokens: 2000,
           temperature: 0.5,
-          top_p: 0.9
-        })
-      });
-      
-      const response = await this.client.send(command);
-      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-      
-      return responseBody.completion.trim();
-    } catch (error) {
-      throw new Error(`Failed to generate PR description: ${(error as Error).message}`);
+          topP: 0.9
+        });
+        
+        return result.text.trim();
+      } catch (error) {
+        console.error(`Error with model ${modelId}:`, error);
+        lastError = error as Error;
+        // Continue trying with the next model
+      }
     }
+    
+    // If we reach here, all models failed
+    throw new Error(`Failed to generate PR description with any Claude model: ${lastError?.message}`);
   }
   
   /**
@@ -72,7 +86,7 @@ export class AIService {
    */
   private createPrompt(gitDiff: string, template: string): string {
     const promptParts = [
-      "Human: I need you to create a pull request description based on the following git diff.",
+      "I need you to create a pull request description based on the following git diff.",
       "Use the template provided below to structure your response.",
       "",
       "GIT DIFF:",

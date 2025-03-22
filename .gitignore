@@ -4,6 +4,8 @@ dist/
 .vscode-test/
 *.vsix
 .DS_Store
+.env
+.cursor/
 coverage/
 .nyc_output/
 *.log 

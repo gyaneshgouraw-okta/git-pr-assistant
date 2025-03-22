@@ -65,14 +65,6 @@ Alternatively, you can configure these settings in VS Code settings:
 
 > ⚠️ Your credentials are stored securely in VS Code's settings storage.
 
-## Architecture
-
-The extension consists of three main components:
-
-1. **GitDiffReader**: Reads the current git diff from the repository
-2. **TemplateManager**: Manages PR templates, including loading default templates and saving custom ones
-3. **AIService**: Interfaces with AWS Bedrock to generate PR descriptions using Claude AI
-
 ## Development
 
 ### Prerequisites
@@ -86,7 +78,43 @@ The extension consists of three main components:
 2. Run `npm install` to install dependencies
 3. Run `npm run compile` to build the extension
 
-### Testing
+### Testing with AWS Bedrock
+
+You can test the AWS Bedrock integration directly without running the VS Code extension:
+
+1. Create a `.env` file in the root directory with your AWS credentials:
+   ```
+   AWS_ACCESS_KEY_ID=your_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_secret_access_key
+   AWS_REGION=us-east-1
+   ```
+
+2. Run one of the test scripts:
+   ```bash
+   # Run with built-in sample diff
+   npm run test:bedrock
+   
+   # Run with the sample diff file
+   npm run test:bedrock:sample
+   
+   # Run with actual uncommitted changes from your working directory
+   npm run test:bedrock:git
+   
+   # Run with a custom diff file
+   DIFF_FILE_PATH=./path/to/your/diff.txt npm run test:bedrock
+   ```
+
+The `test:bedrock:git` option is particularly useful when you want to:
+- Generate a PR description for your current uncommitted changes
+- Test how the AI would describe your work-in-progress
+- Get a preview of your PR description before committing and creating a pull request
+
+When using the `--git` flag, the script will:
+1. Get all uncommitted changes (both staged and unstaged) using `git diff` and `git diff --staged`
+2. Combine them into a single diff
+3. Generate a PR description based on those actual changes
+
+### VS Code Extension Testing
 
 This project follows Test-Driven Development (TDD) principles. There are several ways to run the tests:
 

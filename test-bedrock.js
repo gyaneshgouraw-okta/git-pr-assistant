@@ -1,24 +1,33 @@
-// Test script for AWS Bedrock integration
+// Test script for AWS Bedrock integration using Vercel AI SDK
 // Usage: 
-// 1. Set environment variables:
-//    export AWS_ACCESS_KEY_ID=your_access_key
-//    export AWS_SECRET_ACCESS_KEY=your_secret_key
-//    export AWS_REGION=us-east-1
-// 2. Create a sample diff file or use the built-in example
-// 3. Run: node test-bedrock.js [optional-diff-file-path]
+// 1. Add your AWS credentials to the .env file
+// 2. Run: node test-bedrock.js [optional-diff-file-path]
+// 3. Or just run: node test-bedrock.js --git (to use uncommitted changes)
+
+// Load environment variables from .env file
+require('dotenv').config();
+
+// Required for AWS4Fetch
+global.crypto = require('crypto');
 
 const fs = require('fs');
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execPromise = promisify(exec);
+const { bedrock } = require('@ai-sdk/amazon-bedrock');
+const { generateText } = require('ai');
 
-// Read AWS credentials from environment variables
+// Read AWS credentials from .env file
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const region = process.env.AWS_REGION || 'us-east-1';
+const diffFilePath = process.env.DIFF_FILE_PATH || process.argv[2]; // Command line arg takes precedence
+const useGitChanges = diffFilePath === '--git' || process.env.USE_GIT_CHANGES === 'true';
 
 // Check if credentials are available
 if (!accessKeyId || !secretAccessKey) {
-  console.error('AWS credentials not found in environment variables.');
-  console.error('Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.');
+  console.error('AWS credentials not found in .env file.');
+  console.error('Please add your AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to the .env file.');
   process.exit(1);
 }
 
@@ -34,17 +43,31 @@ const template = `## Summary
 
 async function generatePRDescription(diff, template) {
   try {
-    console.log('Initializing Bedrock client...');
-    const client = new BedrockRuntimeClient({
-      region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey
-      }
-    });
-
-    console.log('Preparing prompt for Claude model...');
-    const prompt = `
+    console.log('Initializing Bedrock client with Vercel AI SDK...');
+    
+    // Configure the AWS Bedrock environment variables
+    process.env.AWS_ACCESS_KEY_ID = accessKeyId;
+    process.env.AWS_SECRET_ACCESS_KEY = secretAccessKey;
+    process.env.AWS_REGION = region;
+    
+    // Try with Claude models from AIService
+    const CLAUDE_MODELS = [
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'anthropic.claude-3-sonnet-20240229-v1:0',
+      'anthropic.claude-3-haiku-20240307-v1:0',
+      'anthropic.claude-instant-v1',
+      'anthropic.claude-v2',
+      'anthropic.claude-v2:1'
+    ];
+    
+    // Try each Claude model until one works
+    let lastError = null;
+    
+    for (const MODEL_ID of CLAUDE_MODELS) {
+      try {
+        console.log(`Trying with model: ${MODEL_ID}`);
+        console.log('Preparing prompt for Claude model...');
+        const prompt = `
 You are a helpful AI assistant. Your task is to create a detailed pull request (PR) description based on the git diff provided below.
 
 Below is a git diff showing code changes:
@@ -64,77 +87,116 @@ The description should:
 Please be technical, precise, and focus on the actual code changes in the diff.
 `;
 
-    console.log('Calling AWS Bedrock...');
-    const input = {
-      modelId: 'anthropic.claude-v2',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({
-        prompt: prompt,
-        max_tokens_to_sample: 4000,
-        temperature: 0.7,
-        top_p: 0.9,
-      }),
-    };
-
-    const command = new InvokeModelCommand(input);
-    const response = await client.send(command);
-
-    // Parse and print the response
-    const responseBody = JSON.parse(Buffer.from(response.body).toString('utf8'));
-    const prDescription = responseBody.completion;
+        console.log('Calling AWS Bedrock using Vercel AI SDK...');
+        const result = await generateText({
+          model: bedrock(MODEL_ID),
+          prompt: prompt,
+          maxTokens: 4000,
+          temperature: 0.7,
+          topP: 0.9,
+        });
+        
+        const prDescription = result.text;
+        
+        console.log('\n----- GENERATED PR DESCRIPTION -----\n');
+        console.log(prDescription);
+        console.log('\n----- END OF PR DESCRIPTION -----\n');
+        
+        return prDescription;
+      } catch (error) {
+        console.error(`Error with model ${MODEL_ID}:`, error);
+        lastError = error;
+        // Continue trying with the next model
+      }
+    }
     
-    console.log('\n----- GENERATED PR DESCRIPTION -----\n');
-    console.log(prDescription);
-    console.log('\n----- END OF PR DESCRIPTION -----\n');
-    
-    return prDescription;
+    // If we reach here, all models failed
+    throw new Error(`Failed to generate PR description with any Claude model: ${lastError?.message}`);
   } catch (error) {
     console.error('Error generating PR description:', error);
     throw error;
   }
 }
 
-// Get diff from file or use sample diff
+// Get git diff for uncommitted changes (both staged and unstaged)
+async function getGitDiff() {
+  try {
+    console.log('Getting uncommitted changes from git...');
+    
+    // Get unstaged changes
+    const { stdout: unstagedDiff } = await execPromise('git diff');
+    
+    // Get staged changes
+    const { stdout: stagedDiff } = await execPromise('git diff --staged');
+    
+    // Combine both diffs
+    const combinedDiff = unstagedDiff + stagedDiff;
+    
+    if (!combinedDiff.trim()) {
+      console.warn('No uncommitted changes found in the repository.');
+      return null;
+    }
+    
+    return combinedDiff;
+  } catch (error) {
+    console.error('Error getting git diff:', error);
+    return null;
+  }
+}
+
+// Get diff from file, git changes, or use sample diff
 async function getDiff() {
-  const filePath = process.argv[2]; // Optional command-line argument for diff file
+  // First priority: Use git changes if explicitly requested
+  if (useGitChanges) {
+    console.log('Using uncommitted git changes...');
+    const gitDiff = await getGitDiff();
+    if (gitDiff) {
+      return gitDiff;
+    }
+    console.log('No git changes found, falling back to alternatives...');
+  }
   
-  if (filePath && fs.existsSync(filePath)) {
-    console.log(`Reading diff from file: ${filePath}`);
-    return fs.readFileSync(filePath, 'utf8');
-  } else {
-    console.log('Using sample diff (no file provided or file not found)');
-    return `
+  // Second priority: Check for file path
+  if (diffFilePath && diffFilePath !== '--git' && fs.existsSync(diffFilePath)) {
+    console.log(`Reading diff from file: ${diffFilePath}`);
+    return fs.readFileSync(diffFilePath, 'utf8');
+  }
+  
+  // Last resort: Use sample diff
+  console.log('Using sample diff (no file provided or git changes found)');
+  return `
 diff --git a/src/components/Button.js b/src/components/Button.js
 index 1234567..abcdefg 100644
 --- a/src/components/Button.js
 +++ b/src/components/Button.js
 @@ -10,7 +10,7 @@ class Button extends Component {
-   
-   render() {
-     return (
+  
+  render() {
+    return (
 -      <button className="btn" onClick={this.handleClick}>
 +      <button className="btn btn-primary" onClick={this.handleClick} aria-label={this.props.label}>
-         {this.props.children}
-       </button>
-     );
+        {this.props.children}
+      </button>
+    );
 @@ -18,6 +18,10 @@ class Button extends Component {
-   
-   handleClick = (e) => {
-     console.log('Button clicked');
+  
+  handleClick = (e) => {
+    console.log('Button clicked');
 +    if (this.props.onClick) {
 +      this.props.onClick(e);
 +    }
 +    
 +    this.trackAnalytics('button_click');
-   }
- }`;
   }
+}`;
 }
 
 // Main function
 async function main() {
   try {
+    console.log('Using AWS credentials from .env file');
+    console.log(`Region: ${region}`);
+    
     const diff = await getDiff();
     await generatePRDescription(diff, template);
   } catch (error) {
