@@ -8,13 +8,17 @@ vsc-extension-quickstart.md
 **/.eslintrc.json
 **/*.map
 **/*.ts
-.cursor/**
+!src/types/**/*.d.ts
 node_modules/**
-!node_modules/@aws-sdk/client-bedrock-runtime/**
+!node_modules/ai/**
+!node_modules/@ai-sdk/amazon-bedrock/**
 scripts/**
 .mocharc.json
 *.vsix
 .github/**
+test-bedrock.js
+sample-diff.txt
+.env
 
 # Keep resources for the icon
 !resources/ 
