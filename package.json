@@ -7,19 +7,69 @@
     "vscode": "^1.60.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "SCM Providers"
   ],
   "activationEvents": [
-    "onCommand:git-ai-assistant.generatePRDescription"
+    "onStartupFinished",
+    "onView:gitAIAssistantPanel",
+    "onCommand:git-ai-assistant.generatePRDescription",
+    "onCommand:git-ai-assistant.configureAWS"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "git-ai-assistant",
+          "title": "Git AI Assistant",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "git-ai-assistant": [
+        {
+          "id": "gitAIAssistantPanel",
+          "name": "Git AI Assistant"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "gitAIAssistantPanel",
+        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure AWS Credentials](command:git-ai-assistant.configureAWS)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)"
+      }
+    ],
     "commands": [
       {
         "command": "git-ai-assistant.generatePRDescription",
         "title": "Generate PR Description and Commit Message"
+      },
+      {
+        "command": "git-ai-assistant.configureAWS",
+        "title": "Configure AWS Credentials"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "git-ai-assistant.configureAWS",
+          "when": "view == gitAIAssistantPanel",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "git-ai-assistant.generatePRDescription",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "git-ai-assistant.configureAWS",
+          "when": "true"
+        }
+      ]
+    },
     "configuration": {
       "title": "Git AI Assistant",
       "properties": {
@@ -56,7 +106,9 @@
     "test:nossl": "npm run compile && node ./scripts/runTestsWithoutSSL.js",
     "test:unit": "mocha --require ts-node/register src/test/suite/**/*.test.ts",
     "test:direct": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/**/*.test.js",
-    "test:template": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/templateManager.test.js"
+    "test:template": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/templateManager.test.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/chai": "^4.3.3",
@@ -67,6 +119,7 @@
     "@types/vscode": "^1.60.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/vsce": "^2.24.0",
     "chai": "^4.3.7",
     "eslint": "^8.57.0",
     "mocha": "^10.2.0",
@@ -77,5 +130,10 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.772.0"
+  },
+  "publisher": "your-publisher-name",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/git-ai-assistant.git"
   }
 }

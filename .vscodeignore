@@ -1,0 +1,20 @@
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
+.cursor/**
+node_modules/**
+!node_modules/@aws-sdk/client-bedrock-runtime/**
+scripts/**
+.mocharc.json
+*.vsix
+.github/**
+
+# Keep resources for the icon
+!resources/ 
