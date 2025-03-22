@@ -1,0 +1,81 @@
+{
+  "name": "git-ai-assistant",
+  "displayName": "Git AI Assistant",
+  "description": "A VS Code extension that generates PR descriptions and commit messages using AI",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:git-ai-assistant.generatePRDescription"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "git-ai-assistant.generatePRDescription",
+        "title": "Generate PR Description and Commit Message"
+      }
+    ],
+    "configuration": {
+      "title": "Git AI Assistant",
+      "properties": {
+        "gitAIAssistant.awsAccessKeyId": {
+          "type": "string",
+          "default": "",
+          "description": "AWS Access Key ID for Bedrock API"
+        },
+        "gitAIAssistant.awsSecretAccessKey": {
+          "type": "string",
+          "default": "",
+          "description": "AWS Secret Access Key for Bedrock API"
+        },
+        "gitAIAssistant.awsRegion": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "AWS Region for Bedrock API"
+        },
+        "gitAIAssistant.defaultPRTemplate": {
+          "type": "string",
+          "default": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n",
+          "description": "Default PR template to use when none is provided"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "test:nossl": "npm run compile && node ./scripts/runTestsWithoutSSL.js",
+    "test:unit": "mocha --require ts-node/register src/test/suite/**/*.test.ts",
+    "test:direct": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/**/*.test.js",
+    "test:template": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/templateManager.test.js"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.3",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^16.11.7",
+    "@types/sinon": "^17.0.4",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "chai": "^4.3.7",
+    "eslint": "^8.57.0",
+    "mocha": "^10.2.0",
+    "sinon": "^19.0.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.4",
+    "vscode-test": "^1.6.1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.772.0"
+  }
+}
