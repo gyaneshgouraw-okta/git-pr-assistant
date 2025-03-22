@@ -1,5 +1,5 @@
-import { bedrock } from '@ai-sdk/amazon-bedrock';
-import { generateText } from 'ai';
+import * as bedrockSdk from '@ai-sdk/amazon-bedrock';
+import * as AWS from 'aws-sdk';
 
 /**
  * Service that uses AWS Bedrock (Claude) via Vercel AI SDK to generate PR descriptions
@@ -8,15 +8,11 @@ export class AIService {
   private region: string;
   private accessKeyId: string;
   private secretAccessKey: string;
+  private sessionToken?: string;
   
   // List of Claude models to try in order of preference
   private readonly CLAUDE_MODELS = [
     'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    'anthropic.claude-3-sonnet-20240229-v1:0',
-    'anthropic.claude-3-haiku-20240307-v1:0',
-    'anthropic.claude-instant-v1',
-    'anthropic.claude-v2',
-    'anthropic.claude-v2:1'
   ];
   
   /**
@@ -24,15 +20,18 @@ export class AIService {
    * @param region AWS region
    * @param accessKeyId AWS access key ID
    * @param secretAccessKey AWS secret access key
+   * @param sessionToken Optional AWS session token for temporary credentials
    */
   constructor(
     region: string,
     accessKeyId: string,
-    secretAccessKey: string
+    secretAccessKey: string,
+    sessionToken?: string
   ) {
     this.region = region;
     this.accessKeyId = accessKeyId;
     this.secretAccessKey = secretAccessKey;
+    this.sessionToken = sessionToken;
   }
   
   /**
@@ -47,6 +46,11 @@ export class AIService {
     process.env.AWS_SECRET_ACCESS_KEY = this.secretAccessKey;
     process.env.AWS_REGION = this.region;
     
+    // Set session token if provided (for temporary credentials)
+    if (this.sessionToken) {
+      process.env.AWS_SESSION_TOKEN = this.sessionToken;
+    }
+    
     // Create the prompt for the AI model
     const prompt = this.createPrompt(gitDiff, template);
     
@@ -57,16 +61,10 @@ export class AIService {
       try {
         console.log(`Trying to generate PR description with model: ${modelId}`);
         
-        // Call Claude model through Vercel AI SDK
-        const result = await generateText({
-          model: bedrock(modelId),
-          prompt: prompt,
-          maxTokens: 2000,
-          temperature: 0.5,
-          topP: 0.9
-        });
+        // Use AWS SDK to invoke model
+        const result = await this.invokeBedrockModel(modelId, prompt);
         
-        return result.text.trim();
+        return result.trim();
       } catch (error) {
         console.error(`Error with model ${modelId}:`, error);
         lastError = error as Error;
@@ -76,6 +74,84 @@ export class AIService {
     
     // If we reach here, all models failed
     throw new Error(`Failed to generate PR description with any Claude model: ${lastError?.message}`);
+  }
+  
+  /**
+   * Invoke the AWS Bedrock model directly
+   * @param modelId The model ID to use
+   * @param prompt The prompt to send
+   * @returns The generated text
+   */
+  private async invokeBedrockModel(modelId: string, prompt: string): Promise<string> {
+    try {
+      // Configure AWS credentials
+      AWS.config.update({
+        region: this.region,
+        credentials: new AWS.Credentials({
+          accessKeyId: this.accessKeyId,
+          secretAccessKey: this.secretAccessKey,
+          sessionToken: this.sessionToken
+        })
+      });
+      
+      // Create Bedrock Runtime client
+      const bedrockRuntime = new AWS.BedrockRuntime();
+      
+      // Format the request based on the model type
+      let requestBody = {};
+      
+      if (modelId.includes('anthropic.claude')) {
+        // Claude models
+        requestBody = {
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 2000,
+          temperature: 0.5,
+          top_p: 0.9,
+          system: "You are an AI assistant that writes clear, concise pull request descriptions based on git diffs.",
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        };
+      } else {
+        // Generic fallback (unlikely to be used, but just in case)
+        requestBody = {
+          prompt,
+          max_tokens: 2000,
+          temperature: 0.5,
+          top_p: 0.9
+        };
+      }
+      
+      // Invoke the model
+      const response = await bedrockRuntime.invokeModel({
+        modelId: modelId,
+        contentType: 'application/json',
+        accept: 'application/json',
+        body: JSON.stringify(requestBody)
+      }).promise();
+      
+      // Parse the response
+      const responseBody = JSON.parse(response.body.toString());
+      
+      // Extract the generated text based on model
+      if (modelId.includes('anthropic.claude')) {
+        return responseBody.content[0].text;
+      } else {
+        // Generic fallback
+        return responseBody.generation || responseBody.text || responseBody.completion || '';
+      }
+    } catch (error) {
+      console.error('Error invoking Bedrock model:', error);
+      throw error;
+    }
   }
   
   /**

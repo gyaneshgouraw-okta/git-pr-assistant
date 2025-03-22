@@ -76,10 +76,11 @@ export function activate(context: vscode.ExtensionContext) {
         const accessKeyId = config.get<string>('awsAccessKeyId') || '';
         const secretAccessKey = config.get<string>('awsSecretAccessKey') || '';
         const region = config.get<string>('awsRegion') || 'us-east-1';
+        const sessionToken = config.get<string>('awsSessionToken') || '';
 
         console.log('Setting webview HTML content');
         // Set webview HTML content
-        awsCredentialsPanel.webview.html = getAWSCredentialsWebviewContent(accessKeyId, secretAccessKey, region);
+        awsCredentialsPanel.webview.html = getAWSCredentialsWebviewContent(accessKeyId, secretAccessKey, region, sessionToken);
 
         // Handle messages from the webview
         awsCredentialsPanel.webview.onDidReceiveMessage(
@@ -92,6 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
                   await config.update('awsAccessKeyId', message.accessKeyId, vscode.ConfigurationTarget.Global);
                   await config.update('awsSecretAccessKey', message.secretAccessKey, vscode.ConfigurationTarget.Global);
                   await config.update('awsRegion', message.region, vscode.ConfigurationTarget.Global);
+                  await config.update('awsSessionToken', message.sessionToken, vscode.ConfigurationTarget.Global);
                   
                   vscode.window.showInformationMessage('AWS credentials saved successfully!');
                 } catch (error) {
@@ -154,6 +156,7 @@ export function activate(context: vscode.ExtensionContext) {
           const accessKeyId = config.get<string>('awsAccessKeyId') || '';
           const secretAccessKey = config.get<string>('awsSecretAccessKey') || '';
           const region = config.get<string>('awsRegion') || 'us-east-1';
+          const sessionToken = config.get<string>('awsSessionToken') || '';
           
           if (!accessKeyId || !secretAccessKey) {
             vscode.window.showErrorMessage('AWS credentials not configured. Please use the Configure AWS Credentials command first.');
@@ -161,7 +164,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
           
           // Use AI service to generate description
-          const aiService = new AIService(region, accessKeyId, secretAccessKey);
+          const aiService = new AIService(region, accessKeyId, secretAccessKey, sessionToken);
           const description = await aiService.generatePRDescription(diff, template);
           
           if (description) {
@@ -256,109 +259,116 @@ class GitAIAssistantItem extends vscode.TreeItem {
 /**
  * Get the HTML content for the AWS credentials webview
  */
-function getAWSCredentialsWebviewContent(accessKeyId: string, secretAccessKey: string, region: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configure AWS Credentials</title>
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
-      padding: 20px;
-    }
-    .form-group {
-      margin-bottom: 15px;
-    }
-    label {
-      display: block;
-      margin-bottom: 5px;
-    }
-    input, select {
-      width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-      background-color: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
-      border: 1px solid var(--vscode-input-border);
-    }
-    button {
-      background-color: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-      border: none;
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: var(--vscode-button-hoverBackground);
-    }
-    .info {
-      margin-top: 20px;
-      font-size: 0.9em;
-      color: var(--vscode-descriptionForeground);
-    }
-  </style>
-</head>
-<body>
-  <h1>Configure AWS Credentials</h1>
-  <form id="awsForm">
-    <div class="form-group">
-      <label for="accessKeyId">AWS Access Key ID</label>
-      <input type="text" id="accessKeyId" value="${accessKeyId}" required>
+function getAWSCredentialsWebviewContent(
+  accessKeyId: string, 
+  secretAccessKey: string, 
+  region: string,
+  sessionToken: string = ''
+): string {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configure AWS Credentials</title>
+    <style>
+      body {
+        padding: 16px;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-foreground);
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      label {
+        display: block;
+        margin-bottom: 4px;
+      }
+      input, select {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        background-color: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+        border: 1px solid var(--vscode-input-border);
+      }
+      button {
+        padding: 8px 16px;
+        background-color: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border: none;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: var(--vscode-button-hoverBackground);
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Configure AWS Credentials</h1>
+      <p>Enter your AWS credentials to use with Bedrock for AI-generated PR descriptions.</p>
+      
+      <div class="field">
+        <label for="accessKeyId">AWS Access Key ID</label>
+        <input type="text" id="accessKeyId" value="${accessKeyId}" placeholder="Enter your AWS Access Key ID" />
+      </div>
+      
+      <div class="field">
+        <label for="secretAccessKey">AWS Secret Access Key</label>
+        <input type="password" id="secretAccessKey" value="${secretAccessKey}" placeholder="Enter your AWS Secret Access Key" />
+      </div>
+      
+      <div class="field">
+        <label for="region">AWS Region</label>
+        <select id="region">
+          <option value="us-east-1" ${region === 'us-east-1' ? 'selected' : ''}>US East (N. Virginia) - us-east-1</option>
+          <option value="us-east-2" ${region === 'us-east-2' ? 'selected' : ''}>US East (Ohio) - us-east-2</option>
+          <option value="us-west-1" ${region === 'us-west-1' ? 'selected' : ''}>US West (N. California) - us-west-1</option>
+          <option value="us-west-2" ${region === 'us-west-2' ? 'selected' : ''}>US West (Oregon) - us-west-2</option>
+          <option value="eu-west-1" ${region === 'eu-west-1' ? 'selected' : ''}>EU (Ireland) - eu-west-1</option>
+          <option value="eu-central-1" ${region === 'eu-central-1' ? 'selected' : ''}>EU (Frankfurt) - eu-central-1</option>
+          <option value="ap-northeast-1" ${region === 'ap-northeast-1' ? 'selected' : ''}>Asia Pacific (Tokyo) - ap-northeast-1</option>
+          <option value="ap-northeast-2" ${region === 'ap-northeast-2' ? 'selected' : ''}>Asia Pacific (Seoul) - ap-northeast-2</option>
+          <option value="ap-southeast-1" ${region === 'ap-southeast-1' ? 'selected' : ''}>Asia Pacific (Singapore) - ap-southeast-1</option>
+          <option value="ap-southeast-2" ${region === 'ap-southeast-2' ? 'selected' : ''}>Asia Pacific (Sydney) - ap-southeast-2</option>
+        </select>
+      </div>
+      
+      <div class="field">
+        <label for="sessionToken">AWS Session Token (optional)</label>
+        <input type="password" id="sessionToken" value="${sessionToken}" placeholder="Enter your AWS Session Token if using temporary credentials" />
+      </div>
+      
+      <button id="saveButton">Save Credentials</button>
     </div>
-    <div class="form-group">
-      <label for="secretAccessKey">AWS Secret Access Key</label>
-      <input type="password" id="secretAccessKey" value="${secretAccessKey}" required>
-    </div>
-    <div class="form-group">
-      <label for="region">AWS Region</label>
-      <select id="region">
-        <option value="us-east-1" ${region === 'us-east-1' ? 'selected' : ''}>US East (N. Virginia)</option>
-        <option value="us-east-2" ${region === 'us-east-2' ? 'selected' : ''}>US East (Ohio)</option>
-        <option value="us-west-1" ${region === 'us-west-1' ? 'selected' : ''}>US West (N. California)</option>
-        <option value="us-west-2" ${region === 'us-west-2' ? 'selected' : ''}>US West (Oregon)</option>
-        <option value="eu-west-1" ${region === 'eu-west-1' ? 'selected' : ''}>EU (Ireland)</option>
-        <option value="eu-central-1" ${region === 'eu-central-1' ? 'selected' : ''}>EU (Frankfurt)</option>
-        <option value="ap-southeast-1" ${region === 'ap-southeast-1' ? 'selected' : ''}>Asia Pacific (Singapore)</option>
-        <option value="ap-northeast-1" ${region === 'ap-northeast-1' ? 'selected' : ''}>Asia Pacific (Tokyo)</option>
-      </select>
-    </div>
-    <button type="submit">Save Credentials</button>
-  </form>
-  
-  <div class="info">
-    <h2>Requirements</h2>
-    <p>To use AWS Bedrock with this extension, you need:</p>
-    <ul>
-      <li>An AWS account with access to Amazon Bedrock</li>
-      <li>IAM user credentials with <code>AmazonBedrockFullAccess</code> permissions</li>
-      <li>Model access enabled for Claude models in the Bedrock console</li>
-    </ul>
-  </div>
-
-  <script>
-    const vscode = acquireVsCodeApi();
     
-    document.getElementById('awsForm').addEventListener('submit', (event) => {
-      event.preventDefault();
+    <script>
+      const vscode = acquireVsCodeApi();
       
-      const accessKeyId = document.getElementById('accessKeyId').value;
-      const secretAccessKey = document.getElementById('secretAccessKey').value;
-      const region = document.getElementById('region').value;
-      
-      vscode.postMessage({
-        command: 'saveCredentials',
-        accessKeyId,
-        secretAccessKey,
-        region
+      document.getElementById('saveButton').addEventListener('click', () => {
+        const accessKeyId = document.getElementById('accessKeyId').value;
+        const secretAccessKey = document.getElementById('secretAccessKey').value;
+        const region = document.getElementById('region').value;
+        const sessionToken = document.getElementById('sessionToken').value;
+        
+        vscode.postMessage({
+          command: 'saveCredentials',
+          accessKeyId,
+          secretAccessKey,
+          region,
+          sessionToken
+        });
       });
-    });
-  </script>
-</body>
-</html>`;
+    </script>
+  </body>
+  </html>`;
 }
 
 /**

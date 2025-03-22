@@ -1,4 +1,4 @@
-// Test script for AWS Bedrock integration using Vercel AI SDK
+// Test script for AWS Bedrock integration using AWS SDK
 // Usage: 
 // 1. Add your AWS credentials to the .env file
 // 2. Run: node test-bedrock.js [optional-diff-file-path]
@@ -14,13 +14,13 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
-const { bedrock } = require('@ai-sdk/amazon-bedrock');
-const { generateText } = require('ai');
+const AWS = require('aws-sdk');
 
 // Read AWS credentials from .env file
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const region = process.env.AWS_REGION || 'us-east-1';
+const sessionToken = process.env.AWS_SESSION_TOKEN;
 const diffFilePath = process.env.DIFF_FILE_PATH || process.argv[2]; // Command line arg takes precedence
 const useGitChanges = diffFilePath === '--git' || process.env.USE_GIT_CHANGES === 'true';
 
@@ -43,31 +43,37 @@ const template = `## Summary
 
 async function generatePRDescription(diff, template) {
   try {
-    console.log('Initializing Bedrock client with Vercel AI SDK...');
+    console.log('Initializing AWS Bedrock client...');
     
     // Configure the AWS Bedrock environment variables
     process.env.AWS_ACCESS_KEY_ID = accessKeyId;
     process.env.AWS_SECRET_ACCESS_KEY = secretAccessKey;
     process.env.AWS_REGION = region;
+    if (sessionToken) {
+      process.env.AWS_SESSION_TOKEN = sessionToken;
+    }
     
-    // Try with Claude models from AIService
+    // Configure AWS credentials
+    AWS.config.update({
+      region: region,
+      credentials: new AWS.Credentials({
+        accessKeyId: accessKeyId,
+        secretAccessKey: secretAccessKey,
+        sessionToken: sessionToken
+      })
+    });
+    
+    // Create Bedrock Runtime client
+    const bedrockRuntime = new AWS.BedrockRuntime();
+    
+    // Focus on just the most likely available models
     const CLAUDE_MODELS = [
-      'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      'anthropic.claude-3-sonnet-20240229-v1:0',
-      'anthropic.claude-3-haiku-20240307-v1:0',
-      'anthropic.claude-instant-v1',
-      'anthropic.claude-v2',
-      'anthropic.claude-v2:1'
+      'anthropic.claude-3-5-sonnet-20241022-v2:0'
     ];
     
-    // Try each Claude model until one works
-    let lastError = null;
-    
-    for (const MODEL_ID of CLAUDE_MODELS) {
-      try {
-        console.log(`Trying with model: ${MODEL_ID}`);
-        console.log('Preparing prompt for Claude model...');
-        const prompt = `
+    // Prepare the prompt for Claude model
+    console.log('Preparing prompt for Claude model...');
+    const prompt = `
 You are a helpful AI assistant. Your task is to create a detailed pull request (PR) description based on the git diff provided below.
 
 Below is a git diff showing code changes:
@@ -86,17 +92,56 @@ The description should:
 
 Please be technical, precise, and focus on the actual code changes in the diff.
 `;
-
-        console.log('Calling AWS Bedrock using Vercel AI SDK...');
-        const result = await generateText({
-          model: bedrock(MODEL_ID),
-          prompt: prompt,
-          maxTokens: 4000,
-          temperature: 0.7,
-          topP: 0.9,
-        });
+    
+    // Try each Claude model until one works
+    let lastError = null;
+    
+    for (const MODEL_ID of CLAUDE_MODELS) {
+      try {
+        console.log(`Trying with model: ${MODEL_ID}`);
         
-        const prDescription = result.text;
+        console.log('Calling AWS Bedrock using AWS SDK...');
+        
+        // Claude 3.5 specific request format
+        const requestBody = {
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 2000,
+          temperature: 0.7,
+          top_p: 0.9,
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ]
+        };
+        
+        console.log('Request body:', JSON.stringify(requestBody, null, 2));
+        
+        // Invoke the model
+        const response = await bedrockRuntime.invokeModel({
+          modelId: MODEL_ID,
+          contentType: 'application/json',
+          accept: 'application/json',
+          body: JSON.stringify(requestBody)
+        }).promise();
+        
+        // Parse the response
+        const responseBody = JSON.parse(response.body.toString());
+        console.log('Response:', JSON.stringify(responseBody, null, 2));
+        
+        // Extract the generated text
+        let prDescription = '';
+        if (responseBody.content && Array.isArray(responseBody.content)) {
+          // Modern Claude 3.x format
+          prDescription = responseBody.content[0].text;
+        } else if (responseBody.completion) {
+          // Older Claude format
+          prDescription = responseBody.completion;
+        } else {
+          // Fallback if neither format is found
+          prDescription = JSON.stringify(responseBody);
+        }
         
         console.log('\n----- GENERATED PR DESCRIPTION -----\n');
         console.log(prDescription);
