@@ -1,4 +1,4 @@
-// Test script for AWS Bedrock integration using AWS SDK
+// Test script for AWS Bedrock integration using Vercel AI SDK
 // Usage: 
 // 1. Add your AWS credentials to the .env file
 // 2. Run: node test-bedrock.js [optional-diff-file-path]
@@ -14,7 +14,10 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
-const AWS = require('aws-sdk');
+
+// Import the Vercel AI SDK
+const { bedrock } = require('@ai-sdk/amazon-bedrock');
+const ai = require('ai');
 
 // Read AWS credentials from .env file
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -43,9 +46,9 @@ const template = `## Summary
 
 async function generatePRDescription(diff, template) {
   try {
-    console.log('Initializing AWS Bedrock client...');
+    console.log('Initializing AWS Bedrock client with Vercel AI SDK...');
     
-    // Configure the AWS Bedrock environment variables
+    // Set environment variables for the Bedrock SDK to use
     process.env.AWS_ACCESS_KEY_ID = accessKeyId;
     process.env.AWS_SECRET_ACCESS_KEY = secretAccessKey;
     process.env.AWS_REGION = region;
@@ -53,110 +56,50 @@ async function generatePRDescription(diff, template) {
       process.env.AWS_SESSION_TOKEN = sessionToken;
     }
     
-    // Configure AWS credentials
-    AWS.config.update({
-      region: region,
-      credentials: new AWS.Credentials({
-        accessKeyId: accessKeyId,
-        secretAccessKey: secretAccessKey,
-        sessionToken: sessionToken
-      })
-    });
+    // Model ID to use
+    const MODEL_ID = 'anthropic.claude-3-5-sonnet-20241022-v2:0';
     
-    // Create Bedrock Runtime client
-    const bedrockRuntime = new AWS.BedrockRuntime();
+    console.log(`Using model: ${MODEL_ID}`);
+    console.log('Generating PR description...');
     
-    // Focus on just the most likely available models
-    const CLAUDE_MODELS = [
-      'anthropic.claude-3-5-sonnet-20241022-v2:0'
-    ];
-    
-    // Prepare the prompt for Claude model
-    console.log('Preparing prompt for Claude model...');
-    const prompt = `
-You are a helpful AI assistant. Your task is to create a detailed pull request (PR) description based on the git diff provided below.
+    // Use the Vercel AI SDK generateText function
+    const { text: generatedText } = await ai.generateText({
+      model: bedrock(MODEL_ID),
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an AI assistant that writes clear, concise pull request descriptions based on git diffs.'
+        },
+        {
+          role: 'user',
+          content: `I need you to create a pull request description based on the following git diff.
+Use the template provided below to structure your response.
 
-Below is a git diff showing code changes:
+GIT DIFF:
 \`\`\`
 ${diff}
 \`\`\`
 
-Please create a comprehensive PR description following this template:
+TEMPLATE:
+\`\`\`
 ${template}
+\`\`\`
 
-The description should:
-1. Summarize the changes clearly
-2. List the most important changes and their impact
-3. Explain any testing that was done or should be done
-4. Note any visual changes if applicable
+Please fill in the template with details about the changes in the git diff. Be concise and clear about the purpose of the changes, what was modified, and any important details reviewers should know.
 
-Please be technical, precise, and focus on the actual code changes in the diff.
-`;
-    
-    // Try each Claude model until one works
-    let lastError = null;
-    
-    for (const MODEL_ID of CLAUDE_MODELS) {
-      try {
-        console.log(`Trying with model: ${MODEL_ID}`);
-        
-        console.log('Calling AWS Bedrock using AWS SDK...');
-        
-        // Claude 3.5 specific request format
-        const requestBody = {
-          anthropic_version: 'bedrock-2023-05-31',
-          max_tokens: 2000,
-          temperature: 0.7,
-          top_p: 0.9,
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ]
-        };
-        
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
-        
-        // Invoke the model
-        const response = await bedrockRuntime.invokeModel({
-          modelId: MODEL_ID,
-          contentType: 'application/json',
-          accept: 'application/json',
-          body: JSON.stringify(requestBody)
-        }).promise();
-        
-        // Parse the response
-        const responseBody = JSON.parse(response.body.toString());
-        console.log('Response:', JSON.stringify(responseBody, null, 2));
-        
-        // Extract the generated text
-        let prDescription = '';
-        if (responseBody.content && Array.isArray(responseBody.content)) {
-          // Modern Claude 3.x format
-          prDescription = responseBody.content[0].text;
-        } else if (responseBody.completion) {
-          // Older Claude format
-          prDescription = responseBody.completion;
-        } else {
-          // Fallback if neither format is found
-          prDescription = JSON.stringify(responseBody);
+Don't include the template markers (like "## Summary") in places they don't belong, and maintain the overall structure of the template. Complete sentences are preferred.`
         }
-        
-        console.log('\n----- GENERATED PR DESCRIPTION -----\n');
-        console.log(prDescription);
-        console.log('\n----- END OF PR DESCRIPTION -----\n');
-        
-        return prDescription;
-      } catch (error) {
-        console.error(`Error with model ${MODEL_ID}:`, error);
-        lastError = error;
-        // Continue trying with the next model
-      }
-    }
+      ],
+      temperature: 0.7,
+      top_p: 0.9,
+      max_tokens: 2000
+    });
+
+    console.log('\n----- GENERATED PR DESCRIPTION -----\n');
+    console.log(generatedText);
+    console.log('\n----- END OF PR DESCRIPTION -----\n');
     
-    // If we reach here, all models failed
-    throw new Error(`Failed to generate PR description with any Claude model: ${lastError?.message}`);
+    return generatedText;
   } catch (error) {
     console.error('Error generating PR description:', error);
     throw error;
@@ -250,4 +193,4 @@ async function main() {
   }
 }
 
-main(); 
+main();
