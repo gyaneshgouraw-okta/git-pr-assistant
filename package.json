@@ -138,7 +138,8 @@
     "package": "vsce package --allow-star-activation",
     "publish": "vsce publish",
     "esbuild": "node esbuild.js",
-    "esbuild:watch": "node esbuild.js --watch"
+    "esbuild:watch": "node esbuild.js --watch",
+    "uninstall": "node scripts/uninstall-extension.js"
   },
   "devDependencies": {
     "@types/chai": "^4.3.3",
