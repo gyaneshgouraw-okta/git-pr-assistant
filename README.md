@@ -1,26 +1,31 @@
 # Git AI Assistant
 
-A VS Code extension that generates PR descriptions and commit messages using AI (AWS Bedrock and Claude).
+A VS Code extension that generates PR descriptions and commit messages using AI (AWS Bedrock Claude or Google Gemini).
 
 ## Features
 
 - Automatically generates PR descriptions based on your local git diffs
-- Uses AWS Bedrock and Claude AI for intelligent text generation
+- Supports multiple AI providers:
+  - AWS Bedrock with Claude models
+  - Google Gemini models
 - Supports customizable PR templates
 - Opens the generated PR description in a new editor tab so you can review and edit it
 - Convenient sidebar panel for quick access to all features
-- Easy configuration UI for AWS credentials
+- Easy configuration UI for AI provider credentials
+- Modular architecture for easy addition of more AI providers in the future
 
 ## Requirements
 
 - Visual Studio Code 1.60.0 or higher
 - Git installed and accessible from the command line
-- AWS account with access to Bedrock and Claude
+- One of the following:
+  - AWS account with access to Bedrock and Claude
+  - Google API key with access to Gemini models
 
 ## Installation
 
 1. Install the extension from the VS Code Marketplace
-2. Configure your AWS credentials through the sidebar panel
+2. Configure your preferred AI provider credentials through the sidebar panel
 
 ## Usage
 
@@ -29,6 +34,7 @@ A VS Code extension that generates PR descriptions and commit messages using AI 
 1. Click on the Git AI Assistant icon in the VS Code Activity Bar (left sidebar)
 2. In the sidebar panel, click on:
    - "Configure AWS Credentials" to set up your AWS access
+   - "Configure Google Credentials" to set up your Google API key
    - "Generate PR Description" to create a PR description
 
 ### Using Commands
@@ -41,24 +47,52 @@ A VS Code extension that generates PR descriptions and commit messages using AI 
 
 ## Configuration
 
-This extension requires AWS credentials for accessing Bedrock services:
+This extension supports multiple AI providers that you can configure:
 
-### Using the Configuration UI
+### AWS Bedrock
+
+#### Using the Configuration UI
 
 1. Click on "Configure AWS Credentials" in the sidebar panel
 2. Enter your AWS Access Key ID and Secret Access Key
 3. Select your preferred AWS Region
-4. Click "Save Credentials"
+4. Click "Save Credentials & Use AWS Bedrock"
 
-### Using Settings 
+#### Using Settings 
 
-Alternatively, you can configure these settings in VS Code settings:
+You can also configure these settings in VS Code settings:
 
 ```json
 {
+  "gitAIAssistant.modelProvider": "aws-bedrock",
   "gitAIAssistant.awsAccessKeyId": "YOUR_AWS_ACCESS_KEY_ID",
   "gitAIAssistant.awsSecretAccessKey": "YOUR_AWS_SECRET_ACCESS_KEY",
   "gitAIAssistant.awsRegion": "us-east-1",
+  "gitAIAssistant.defaultPRTemplate": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n"
+}
+```
+
+### Google Gemini
+
+#### Using the Configuration UI
+
+1. Click on "Configure Google Credentials" in the sidebar panel
+2. Enter your Google API Key
+3. Select your preferred Gemini model:
+   - Gemini 1.5 Flash (default)
+   - Gemini 1.5 Flash 8B (smaller model)
+   - Gemini 2.0 Flash (experimental)
+4. Click "Save Credentials & Use Google Gemini"
+
+#### Using Settings
+
+You can also configure these settings in VS Code settings:
+
+```json
+{
+  "gitAIAssistant.modelProvider": "google-gemini",
+  "gitAIAssistant.googleApiKey": "YOUR_GOOGLE_API_KEY",
+  "gitAIAssistant.googleGeminiModel": "gemini-1.5-flash",
   "gitAIAssistant.defaultPRTemplate": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n"
 }
 ```
@@ -78,9 +112,11 @@ Alternatively, you can configure these settings in VS Code settings:
 2. Run `npm install` to install dependencies
 3. Run `npm run compile` to build the extension
 
-### Testing with AWS Bedrock
+### Testing the AI Integrations
 
-You can test the AWS Bedrock integration directly without running the VS Code extension:
+You can test both AI integrations directly without running the VS Code extension:
+
+#### AWS Bedrock Testing
 
 1. Create a `.env` file in the root directory with your AWS credentials:
    ```
@@ -89,13 +125,10 @@ You can test the AWS Bedrock integration directly without running the VS Code ex
    AWS_REGION=us-east-1
    ```
 
-2. Run one of the test scripts:
+2. Run one of the AWS test scripts:
    ```bash
    # Run with built-in sample diff
    npm run test:bedrock
-   
-   # Run with the sample diff file
-   npm run test:bedrock:sample
    
    # Run with actual uncommitted changes from your working directory
    npm run test:bedrock:git
@@ -104,12 +137,32 @@ You can test the AWS Bedrock integration directly without running the VS Code ex
    DIFF_FILE_PATH=./path/to/your/diff.txt npm run test:bedrock
    ```
 
-The `test:bedrock:git` option is particularly useful when you want to:
+#### Google Gemini Testing
+
+1. Create a `.env` file in the root directory with your Google API key:
+   ```
+   GOOGLE_API_KEY=your_google_api_key
+   GOOGLE_MODEL_ID=gemini-1.5-flash  # Optional, defaults to gemini-1.5-flash
+   ```
+
+2. Run one of the Google test scripts:
+   ```bash
+   # Run with built-in sample diff
+   npm run test:gemini
+   
+   # Run with actual uncommitted changes from your working directory
+   npm run test:gemini:git
+   
+   # Run with a custom diff file
+   DIFF_FILE_PATH=./path/to/your/diff.txt npm run test:gemini
+   ```
+
+The `test:*:git` options are particularly useful when you want to:
 - Generate a PR description for your current uncommitted changes
 - Test how the AI would describe your work-in-progress
 - Get a preview of your PR description before committing and creating a pull request
 
-When using the `--git` flag, the script will:
+When using the `--git` flag, the scripts will:
 1. Get all uncommitted changes (both staged and unstaged) using `git diff` and `git diff --staged`
 2. Combine them into a single diff
 3. Generate a PR description based on those actual changes
@@ -135,7 +188,7 @@ npm run test:template
 The project includes comprehensive unit tests for all components:
 - GitDiffReader: Tests for reading git diffs
 - TemplateManager: Tests for managing PR templates
-- AIService: Tests for generating PR descriptions with AWS Bedrock
+- AIService: Tests for generating PR descriptions with AWS Bedrock and Google Gemini
 
 ### Packaging and Deployment
 
@@ -185,6 +238,16 @@ Or you can publish in one step with your token:
 ```bash
 vsce publish -p <your-personal-access-token>
 ```
+
+### Uninstalling the Extension
+
+To uninstall the extension, you can use the built-in npm script:
+
+```bash
+npm run uninstall
+```
+
+This will automatically detect your editor (VS Code or Cursor) and handle the uninstallation process accordingly.
 
 ## License
 

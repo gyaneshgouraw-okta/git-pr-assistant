@@ -36,7 +36,7 @@
     "viewsWelcome": [
       {
         "view": "gitAIAssistantPanel",
-        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure AWS Credentials](command:git-ai-assistant.configureAWS)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)\n[Test Command](command:git-ai-assistant.testCommand)"
+        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure AI Provider](command:git-ai-assistant.configureProvider)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)\n[Test Command](command:git-ai-assistant.testCommand)"
       }
     ],
     "commands": [
@@ -45,8 +45,16 @@
         "title": "Generate PR Description and Commit Message"
       },
       {
+        "command": "git-ai-assistant.configureProvider",
+        "title": "Configure AI Provider"
+      },
+      {
         "command": "git-ai-assistant.configureAWS",
         "title": "Configure AWS Credentials"
+      },
+      {
+        "command": "git-ai-assistant.configureGoogle",
+        "title": "Configure Google Credentials"
       },
       {
         "command": "git-ai-assistant.testCommand",
@@ -56,22 +64,8 @@
     "menus": {
       "view/title": [
         {
-          "command": "git-ai-assistant.configureAWS",
+          "command": "git-ai-assistant.configureProvider",
           "when": "view == gitAIAssistantPanel",
-          "group": "navigation"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "git-ai-assistant.configureAWS",
-          "group": "navigation"
-        },
-        {
-          "command": "git-ai-assistant.generatePRDescription",
-          "group": "navigation"
-        },
-        {
-          "command": "git-ai-assistant.testCommand",
           "group": "navigation"
         }
       ],
@@ -81,8 +75,16 @@
           "when": "true"
         },
         {
-          "command": "git-ai-assistant.configureAWS",
+          "command": "git-ai-assistant.configureProvider",
           "when": "true"
+        },
+        {
+          "command": "git-ai-assistant.configureAWS",
+          "when": "false"
+        },
+        {
+          "command": "git-ai-assistant.configureGoogle",
+          "when": "false"
         },
         {
           "command": "git-ai-assistant.testCommand",
@@ -93,6 +95,12 @@
     "configuration": {
       "title": "Git AI Assistant",
       "properties": {
+        "gitAIAssistant.modelProvider": {
+          "type": "string",
+          "enum": ["aws-bedrock", "google-gemini"],
+          "default": "aws-bedrock",
+          "description": "The AI model provider to use for generating PR descriptions"
+        },
         "gitAIAssistant.awsAccessKeyId": {
           "type": "string",
           "default": "",
@@ -112,6 +120,17 @@
           "type": "string",
           "default": "",
           "description": "AWS Session Token for temporary credentials (optional)"
+        },
+        "gitAIAssistant.googleApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Google API Key for Gemini models"
+        },
+        "gitAIAssistant.googleGeminiModel": {
+          "type": "string",
+          "enum": ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-flash-8b"],
+          "default": "gemini-1.5-flash",
+          "description": "Google Gemini model to use"
         },
         "gitAIAssistant.defaultPRTemplate": {
           "type": "string",
@@ -135,10 +154,13 @@
     "test:direct": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/**/*.test.js",
     "test:template": "npm run compile && node ./scripts/runUnitTests.js ./out/test/suite/templateManager.test.js",
     "test:bedrock:git": "node test-bedrock.js --git",
+    "test:gemini": "node scripts/test-gemini.js",
+    "test:gemini:git": "node scripts/test-gemini.js --git",
     "package": "vsce package --allow-star-activation",
     "publish": "vsce publish",
     "esbuild": "node esbuild.js",
     "esbuild:watch": "node esbuild.js --watch",
+    "build": "npm run compile && npm run package",
     "uninstall": "node scripts/uninstall-extension.js"
   },
   "devDependencies": {
@@ -167,6 +189,7 @@
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^2.2.0",
+    "@ai-sdk/google": "^1.2.0",
     "@ai-sdk/provider-utils": "^2.2.0",
     "ai": "^4.2.0",
     "aws-sdk": "^2.1692.0"
