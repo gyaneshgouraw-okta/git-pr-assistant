@@ -8,11 +8,25 @@ let awsCredentialsPanel: vscode.WebviewPanel | undefined = undefined;
 let googleCredentialsPanel: vscode.WebviewPanel | undefined = undefined;
 let providerConfigPanel: vscode.WebviewPanel | undefined = undefined;
 
+// Store the extension context for access throughout the module
+let extensionContext: vscode.ExtensionContext;
+
+// Add a global templateManager variable at the top of the file
+let templateManager: TemplateManager;
+
 /**
  * This method is called when the extension is activated.
  * @param context The extension context
  */
 export function activate(context: vscode.ExtensionContext) {
+  console.log('Activating Git AI Assistant extension...');
+  
+  // Store context for global access
+  extensionContext = context;
+  
+  // Initialize the template manager
+  templateManager = new TemplateManager(context);
+  
   console.log('Git AI Assistant is now active');
   console.log(`Activation events: ${context.extension.packageJSON.activationEvents}`);
   console.log(`Commands: ${JSON.stringify(context.extension.packageJSON.contributes.commands)}`);
@@ -84,49 +98,92 @@ export function activate(context: vscode.ExtensionContext) {
         const awsSessionToken = config.get<string>('awsSessionToken') || '';
         const googleApiKey = config.get<string>('googleApiKey') || '';
         const googleGeminiModel = config.get<string>('googleGeminiModel') || 'gemini-1.5-flash';
+        const useRepoTemplate = config.get<boolean>('useRepoTemplate') || false;
 
         console.log('Setting webview HTML content');
         // Set webview HTML content
         providerConfigPanel.webview.html = getProviderConfigWebviewContent(
           provider,
-          {
-            accessKeyId: awsAccessKeyId,
-            secretAccessKey: awsSecretAccessKey,
-            region: awsRegion,
-            sessionToken: awsSessionToken
-          },
-          {
-            apiKey: googleApiKey,
-            modelId: googleGeminiModel
-          }
+          awsAccessKeyId,
+          awsSecretAccessKey,
+          awsRegion,
+          awsSessionToken,
+          googleApiKey,
+          googleGeminiModel,
+          config.get<string>('templateSource', 'repository'),
+          templateManager.getCustomTemplate() || '',
+          config.get<string>('defaultTemplate', '')
         );
 
         // Handle messages from the webview
         providerConfigPanel.webview.onDidReceiveMessage(
           async (message) => {
-            console.log('Received message from webview:', message.command);
             switch (message.command) {
               case 'saveConfiguration':
-                try {
-                  // Update configuration with new values based on provider
-                  await config.update('modelProvider', message.provider, vscode.ConfigurationTarget.Global);
-                  
-                  if (message.provider === 'aws-bedrock') {
-                    await config.update('awsAccessKeyId', message.aws.accessKeyId, vscode.ConfigurationTarget.Global);
-                    await config.update('awsSecretAccessKey', message.aws.secretAccessKey, vscode.ConfigurationTarget.Global);
-                    await config.update('awsRegion', message.aws.region, vscode.ConfigurationTarget.Global);
-                    await config.update('awsSessionToken', message.aws.sessionToken, vscode.ConfigurationTarget.Global);
-                  } else if (message.provider === 'google-gemini') {
-                    await config.update('googleApiKey', message.google.apiKey, vscode.ConfigurationTarget.Global);
-                    await config.update('googleGeminiModel', message.google.modelId, vscode.ConfigurationTarget.Global);
-                  }
-                  
-                  vscode.window.showInformationMessage(`AI Provider configured: ${message.provider === 'aws-bedrock' ? 'AWS Bedrock' : 'Google Gemini'}`);
-                  
-                  // Refresh the sidebar to reflect the new provider
-                  treeDataProvider.refresh();
-                } catch (error) {
-                  vscode.window.showErrorMessage(`Failed to save configuration: ${(error as Error).message}`);
+                const provider = message.provider;
+                const templateSource = message.templateSource;
+                
+                // Save general settings
+                await config.update('modelProvider', provider, vscode.ConfigurationTarget.Global);
+                await config.update('templateSource', templateSource, vscode.ConfigurationTarget.Global);
+                
+                if (provider === 'aws-bedrock') {
+                  // Save AWS settings
+                  await config.update('awsAccessKeyId', message.awsAccessKeyId, vscode.ConfigurationTarget.Global);
+                  await config.update('awsSecretAccessKey', message.awsSecretAccessKey, vscode.ConfigurationTarget.Global);
+                  await config.update('awsRegion', message.awsRegion, vscode.ConfigurationTarget.Global);
+                  await config.update('awsSessionToken', message.awsSessionToken, vscode.ConfigurationTarget.Global);
+                  vscode.window.showInformationMessage('AWS Bedrock configuration saved successfully');
+                } else if (provider === 'google-gemini') {
+                  // Save Google settings
+                  await config.update('googleApiKey', message.googleApiKey, vscode.ConfigurationTarget.Global);
+                  await config.update('googleGeminiModel', message.googleModel, vscode.ConfigurationTarget.Global);
+                  vscode.window.showInformationMessage('Google Gemini configuration saved successfully');
+                }
+                
+                // Refresh tree view to show updated provider
+                treeDataProvider.refresh();
+                break;
+                
+              case 'saveCustomTemplate':
+                // Save custom template to extension global state
+                templateManager.saveCustomTemplate(message.template);
+                // Update template source to 'custom'
+                await config.update('templateSource', 'custom', vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage('Custom template saved successfully');
+                treeDataProvider.refresh();
+                
+                // Refresh webview to show template source change
+                if (providerConfigPanel) {
+                  updateProviderConfigPanel();
+                }
+                break;
+                
+              case 'deleteCustomTemplate':
+                // Delete custom template from extension global state
+                templateManager.deleteCustomTemplate();
+                vscode.window.showInformationMessage('Custom template deleted');
+                
+                // Refresh webview
+                if (providerConfigPanel) {
+                  updateProviderConfigPanel();
+                }
+                break;
+                
+              case 'saveDefaultTemplate':
+                // Save default template to global settings
+                await config.update('defaultTemplate', message.template, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage('Default template saved successfully');
+                break;
+                
+              case 'resetDefaultTemplate':
+                // Reset default template to the extension's built-in default
+                await config.update('defaultTemplate', '', vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage('Default template reset to extension default');
+                
+                // Refresh webview
+                if (providerConfigPanel) {
+                  updateProviderConfigPanel();
                 }
                 break;
             }
@@ -323,17 +380,28 @@ export function activate(context: vscode.ExtensionContext) {
     
     try {
       // Get git diff
+      console.log('Creating GitDiffReader instance...');
       const gitDiffReader = new GitDiffReader();
+      console.log('Calling getDiff()...');
       const diff = await gitDiffReader.getDiff();
+      console.log('getDiff() returned:', diff ? `diff of length ${diff.length}` : 'null');
       
       if (!diff) {
-        vscode.window.showInformationMessage('No changes detected. Make sure you have staged changes.');
+        console.log('No diff detected, showing info message');
+        vscode.window.showInformationMessage('No changes detected. Make sure you have staged changes using "git add" command.');
         return;
       }
       
-      // Get template
-      const templateManager = new TemplateManager(context);
-      const template = await templateManager.getTemplate();
+      // Get the active workspace folder
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      const activeWorkspaceFolder = workspaceFolders && workspaceFolders.length > 0 ? 
+        workspaceFolders[0] : undefined;
+      console.log('Active workspace folder:', activeWorkspaceFolder?.uri.fsPath || 'none');
+      
+      // Use the global templateManager instead of creating a new instance
+      console.log('Getting template from templateManager...');
+      const template = await templateManager.getTemplate(activeWorkspaceFolder);
+      console.log('Template retrieved, length:', template.length);
       
       // Show progress notification
       vscode.window.withProgress({
@@ -347,6 +415,7 @@ export function activate(context: vscode.ExtensionContext) {
           // Get configuration
           const config = vscode.workspace.getConfiguration('gitAIAssistant');
           const modelProvider = config.get<string>('modelProvider') || 'aws-bedrock';
+          console.log('Using model provider:', modelProvider);
           
           // Create the appropriate AI service based on the provider
           let aiService;
@@ -364,6 +433,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
             
             // Create AWS Bedrock service
+            console.log('Creating AWS Bedrock service...');
             aiService = AIServiceFactory.createService('aws-bedrock', {
               region,
               accessKeyId,
@@ -431,59 +501,83 @@ export function activate(context: vscode.ExtensionContext) {
 /**
  * Tree data provider for the sidebar view
  */
-class GitAIAssistantProvider implements vscode.TreeDataProvider<GitAIAssistantItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<GitAIAssistantItem | undefined | null | void> = new vscode.EventEmitter<GitAIAssistantItem | undefined | null | void>();
-  readonly onDidChangeTreeData: vscode.Event<GitAIAssistantItem | undefined | null | void> = this._onDidChangeTreeData.event;
+class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
+  private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: GitAIAssistantItem): vscode.TreeItem {
+  getTreeItem(element: TreeItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: GitAIAssistantItem): Thenable<GitAIAssistantItem[]> {
+  getChildren(element?: TreeItem): Thenable<TreeItem[]> {
     if (element) {
       return Promise.resolve([]);
-    } else {
-      // Get current provider
-      const config = vscode.workspace.getConfiguration('gitAIAssistant');
-      const provider = config.get<string>('modelProvider') || 'aws-bedrock';
-      
-      // Root elements - simplified to just two options
-      const items = [
-        new GitAIAssistantItem('Generate PR Description', 'Generate a PR description using AI', 'git-ai-assistant.generatePRDescription', 'notebook'),
-        new GitAIAssistantItem('Configure AI Provider', `Current: ${provider === 'aws-bedrock' ? 'AWS Bedrock' : 'Google Gemini'}`, 'git-ai-assistant.configureProvider', 'gear')
-      ];
-      
-      return Promise.resolve(items);
     }
+    
+    // Get the current model provider configuration
+    const config = vscode.workspace.getConfiguration('gitAIAssistant');
+    const provider = config.get<string>('modelProvider', 'aws-bedrock');
+    const templateSource = config.get<string>('templateSource', 'default');
+    
+    // Format the provider name for display
+    let providerDisplay = 'AWS Bedrock';
+    if (provider === 'google-gemini') {
+      providerDisplay = 'Google Gemini';
+    }
+    
+    // Format the template source for display
+    let templateDisplay = 'Default';
+    if (templateSource === 'custom') {
+      templateDisplay = 'Custom';
+    } else if (templateSource === 'repository') {
+      templateDisplay = 'Repository';
+    }
+    
+    // Create the root elements
+    return Promise.resolve([
+      new TreeItem(
+        'Generate PR Description',
+        'Click to generate a PR description using AI',
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: 'git-ai-assistant.generatePRDescription',
+          title: 'Generate PR Description',
+          arguments: []
+        }
+      ),
+      new TreeItem(
+        `Configure Settings (Provider: ${providerDisplay}, Template: ${templateDisplay})`,
+        'Configure AI provider and template settings',
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: 'git-ai-assistant.configureProvider',
+          title: 'Configure Settings',
+          arguments: []
+        }
+      )
+    ]);
   }
 }
 
 /**
  * Tree item for the sidebar view
  */
-class GitAIAssistantItem extends vscode.TreeItem {
+class TreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly tooltip: string,
-    private readonly commandId?: string,
-    public readonly iconName?: string
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly command?: vscode.Command
   ) {
-    super(label, vscode.TreeItemCollapsibleState.None);
+    super(label, collapsibleState);
     this.tooltip = tooltip;
     
-    if (commandId) {
-      this.command = {
-        command: commandId,
-        title: label
-      };
-    }
-    
-    if (iconName) {
-      this.iconPath = new vscode.ThemeIcon(iconName);
+    if (command) {
+      this.command = command;
     }
   }
 }
@@ -697,188 +791,346 @@ function getGoogleCredentialsWebviewContent(apiKey: string, modelId: string): st
  */
 function getProviderConfigWebviewContent(
   currentProvider: string,
-  awsConfig: {
-    accessKeyId: string;
-    secretAccessKey: string;
-    region: string;
-    sessionToken: string;
-  },
-  googleConfig: {
-    apiKey: string;
-    modelId: string;
-  }
+  awsAccessKeyId: string,
+  awsSecretAccessKey: string,
+  awsRegion: string,
+  awsSessionToken: string,
+  googleApiKey: string,
+  googleModel: string,
+  templateSource: string,
+  customTemplate: string,
+  defaultTemplate: string
 ): string {
+  // Get current configuration
+  const config = vscode.workspace.getConfiguration('gitAIAssistant');
+  
   return `
   <!DOCTYPE html>
   <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configure AI Provider</title>
+    <title>AI Provider Configuration</title>
     <style>
-      body {
-        padding: 16px;
-        font-family: var(--vscode-font-family);
-        color: var(--vscode-foreground);
-      }
-      .container {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      label {
-        display: block;
-        margin-bottom: 4px;
-      }
-      input, select {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        background-color: var(--vscode-input-background);
-        color: var(--vscode-input-foreground);
-        border: 1px solid var(--vscode-input-border);
-      }
-      button {
-        padding: 8px 16px;
-        background-color: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border: none;
-        cursor: pointer;
-      }
-      button:hover {
-        background-color: var(--vscode-button-hoverBackground);
-      }
-      .field {
-        margin-bottom: 16px;
-      }
-      .provider-section {
-        margin-top: 16px;
-        padding: 16px;
-        border: 1px solid var(--vscode-panel-border);
-        border-radius: 4px;
-      }
-      .hidden {
-        display: none;
-      }
+        body {
+            font-family: var(--vscode-font-family);
+            padding: 20px;
+            color: var(--vscode-foreground);
+        }
+        .provider-selector {
+            margin-bottom: 20px;
+        }
+        .config-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 5px;
+        }
+        .field {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+        }
+        textarea {
+            min-height: 200px;
+            font-family: monospace;
+        }
+        .template-section {
+            margin-top: 30px;
+            border-top: 1px solid var(--vscode-panel-border);
+            padding-top: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        .tab-container {
+            margin-bottom: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab-button {
+            padding: 8px 16px;
+            background: none;
+            border: 1px solid var(--vscode-panel-border);
+            border-bottom: none;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .tab-button.active {
+            background-color: var(--vscode-tab-activeBackground);
+            color: var(--vscode-tab-activeForeground);
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid var(--vscode-panel-border);
+        }
+        .tab-content.active {
+            display: block;
+        }
     </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Configure AI Provider</h1>
-      <p>Select an AI provider and configure its credentials for generating PR descriptions.</p>
-      
-      <div class="field">
-        <label for="provider">AI Provider</label>
-        <select id="provider">
-          <option value="aws-bedrock" ${currentProvider === 'aws-bedrock' ? 'selected' : ''}>AWS Bedrock (Claude)</option>
-          <option value="google-gemini" ${currentProvider === 'google-gemini' ? 'selected' : ''}>Google Gemini</option>
+</head>
+<body>
+    <h1>AI Provider Configuration</h1>
+    
+    <div class="provider-selector">
+        <label for="provider-select">Select AI Provider:</label>
+        <select id="provider-select">
+            <option value="aws-bedrock" ${currentProvider === 'aws-bedrock' ? 'selected' : ''}>AWS Bedrock</option>
+            <option value="google-gemini" ${currentProvider === 'google-gemini' ? 'selected' : ''}>Google Gemini</option>
         </select>
-      </div>
-      
-      <!-- AWS Bedrock Configuration -->
-      <div id="aws-section" class="provider-section ${currentProvider === 'aws-bedrock' ? '' : 'hidden'}">
-        <h2>AWS Bedrock Configuration</h2>
-        <p>Enter your AWS credentials to use with Bedrock.</p>
-        
-        <div class="field">
-          <label for="aws-access-key">AWS Access Key ID</label>
-          <input type="text" id="aws-access-key" value="${awsConfig.accessKeyId}" placeholder="Enter your AWS Access Key ID" />
-        </div>
-        
-        <div class="field">
-          <label for="aws-secret-key">AWS Secret Access Key</label>
-          <input type="password" id="aws-secret-key" value="${awsConfig.secretAccessKey}" placeholder="Enter your AWS Secret Access Key" />
-        </div>
-        
-        <div class="field">
-          <label for="aws-region">AWS Region</label>
-          <select id="aws-region">
-            <option value="us-east-1" ${awsConfig.region === 'us-east-1' ? 'selected' : ''}>US East (N. Virginia) - us-east-1</option>
-            <option value="us-east-2" ${awsConfig.region === 'us-east-2' ? 'selected' : ''}>US East (Ohio) - us-east-2</option>
-            <option value="us-west-1" ${awsConfig.region === 'us-west-1' ? 'selected' : ''}>US West (N. California) - us-west-1</option>
-            <option value="us-west-2" ${awsConfig.region === 'us-west-2' ? 'selected' : ''}>US West (Oregon) - us-west-2</option>
-            <option value="eu-west-1" ${awsConfig.region === 'eu-west-1' ? 'selected' : ''}>EU (Ireland) - eu-west-1</option>
-            <option value="eu-central-1" ${awsConfig.region === 'eu-central-1' ? 'selected' : ''}>EU (Frankfurt) - eu-central-1</option>
-            <option value="ap-northeast-1" ${awsConfig.region === 'ap-northeast-1' ? 'selected' : ''}>Asia Pacific (Tokyo) - ap-northeast-1</option>
-            <option value="ap-northeast-2" ${awsConfig.region === 'ap-northeast-2' ? 'selected' : ''}>Asia Pacific (Seoul) - ap-northeast-2</option>
-            <option value="ap-southeast-1" ${awsConfig.region === 'ap-southeast-1' ? 'selected' : ''}>Asia Pacific (Singapore) - ap-southeast-1</option>
-            <option value="ap-southeast-2" ${awsConfig.region === 'ap-southeast-2' ? 'selected' : ''}>Asia Pacific (Sydney) - ap-southeast-2</option>
-          </select>
-        </div>
-        
-        <div class="field">
-          <label for="aws-session-token">AWS Session Token (optional)</label>
-          <input type="password" id="aws-session-token" value="${awsConfig.sessionToken}" placeholder="Enter your AWS Session Token if using temporary credentials" />
-        </div>
-      </div>
-      
-      <!-- Google Gemini Configuration -->
-      <div id="google-section" class="provider-section ${currentProvider === 'google-gemini' ? '' : 'hidden'}">
-        <h2>Google Gemini Configuration</h2>
-        <p>Enter your Google API key and select a Gemini model.</p>
-        
-        <div class="field">
-          <label for="google-api-key">Google API Key</label>
-          <input type="password" id="google-api-key" value="${googleConfig.apiKey}" placeholder="Enter your Google API Key" />
-        </div>
-        
-        <div class="field">
-          <label for="google-model">Gemini Model</label>
-          <select id="google-model">
-            <option value="gemini-1.5-flash" ${googleConfig.modelId === 'gemini-1.5-flash' ? 'selected' : ''}>Gemini 1.5 Flash</option>
-            <option value="gemini-1.5-flash-8b" ${googleConfig.modelId === 'gemini-1.5-flash-8b' ? 'selected' : ''}>Gemini 1.5 Flash 8B</option>
-            <option value="gemini-2.0-flash-exp" ${googleConfig.modelId === 'gemini-2.0-flash-exp' ? 'selected' : ''}>Gemini 2.0 Flash (Experimental)</option>
-          </select>
-        </div>
-      </div>
-      
-      <button id="saveButton">Save Configuration</button>
     </div>
     
+    <div id="aws-config" class="config-section" style="display: ${currentProvider === 'aws-bedrock' ? 'block' : 'none'}">
+        <h2>AWS Bedrock Configuration</h2>
+        <div class="field">
+            <label for="aws-access-key">Access Key ID:</label>
+            <input type="password" id="aws-access-key" value="${awsAccessKeyId}" placeholder="Enter AWS Access Key ID">
+        </div>
+        <div class="field">
+            <label for="aws-secret-key">Secret Access Key:</label>
+            <input type="password" id="aws-secret-key" value="${awsSecretAccessKey}" placeholder="Enter AWS Secret Access Key">
+        </div>
+        <div class="field">
+            <label for="aws-region">Region:</label>
+            <input type="text" id="aws-region" value="${awsRegion}" placeholder="Enter AWS Region (e.g., us-west-2)">
+        </div>
+        <div class="field">
+            <label for="aws-session-token">Session Token (optional):</label>
+            <input type="password" id="aws-session-token" value="${awsSessionToken}" placeholder="Enter AWS Session Token if using temporary credentials">
+        </div>
+    </div>
+    
+    <div id="google-config" class="config-section" style="display: ${currentProvider === 'google-gemini' ? 'block' : 'none'}">
+        <h2>Google Gemini Configuration</h2>
+        <div class="field">
+            <label for="google-api-key">API Key:</label>
+            <input type="password" id="google-api-key" value="${googleApiKey}" placeholder="Enter Google API Key">
+        </div>
+        <div class="field">
+            <label for="google-model">Model:</label>
+            <select id="google-model">
+                <option value="gemini-pro" ${googleModel === 'gemini-pro' ? 'selected' : ''}>gemini-pro</option>
+                <option value="gemini-pro-vision" ${googleModel === 'gemini-pro-vision' ? 'selected' : ''}>gemini-pro-vision</option>
+            </select>
+        </div>
+    </div>
+    
+    <button id="save-config">Save Configuration</button>
+    
+    <div class="template-section">
+        <h2>PR Template Configuration</h2>
+        
+        <div class="field">
+            <label for="template-source">Template Source:</label>
+            <select id="template-source">
+                <option value="custom" ${templateSource === 'custom' ? 'selected' : ''}>Custom Template</option>
+                <option value="repository" ${templateSource === 'repository' ? 'selected' : ''}>Repository Template</option>
+                <option value="default" ${templateSource === 'default' ? 'selected' : ''}>Default Template</option>
+            </select>
+        </div>
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button ${templateSource === 'custom' ? 'active' : ''}" data-tab="custom-template">Custom Template</button>
+                <button class="tab-button ${templateSource === 'default' ? 'active' : ''}" data-tab="default-template">Default Template</button>
+            </div>
+            
+            <div id="custom-template" class="tab-content ${templateSource === 'custom' ? 'active' : ''}">
+                <div class="field">
+                    <label for="custom-template-content">Custom Template:</label>
+                    <textarea id="custom-template-content" placeholder="Enter your custom PR template here">${customTemplate || ''}</textarea>
+                </div>
+                <div>
+                    <button id="save-custom-template">Save Custom Template</button>
+                    <button id="delete-custom-template">Delete Custom Template</button>
+                </div>
+            </div>
+            
+            <div id="default-template" class="tab-content ${templateSource === 'default' ? 'active' : ''}">
+                <div class="field">
+                    <label for="default-template-content">Default Template:</label>
+                    <textarea id="default-template-content" placeholder="Enter your default PR template here">${defaultTemplate || ''}</textarea>
+                </div>
+                <div>
+                    <button id="save-default-template">Save Default Template</button>
+                    <button id="reset-default-template">Reset to Extension Default</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-      const vscode = acquireVsCodeApi();
-      const providerSelect = document.getElementById('provider');
-      const awsSection = document.getElementById('aws-section');
-      const googleSection = document.getElementById('google-section');
-      
-      // Toggle visibility of provider sections based on selection
-      providerSelect.addEventListener('change', () => {
-        const provider = providerSelect.value;
-        
-        if (provider === 'aws-bedrock') {
-          awsSection.classList.remove('hidden');
-          googleSection.classList.add('hidden');
-        } else if (provider === 'google-gemini') {
-          awsSection.classList.add('hidden');
-          googleSection.classList.remove('hidden');
-        }
-      });
-      
-      // Save button handler
-      document.getElementById('saveButton').addEventListener('click', () => {
-        const provider = providerSelect.value;
-        
-        // Get configuration based on the selected provider
-        const config = {
-          command: 'saveConfiguration',
-          provider: provider,
-          aws: {
-            accessKeyId: document.getElementById('aws-access-key').value,
-            secretAccessKey: document.getElementById('aws-secret-key').value,
-            region: document.getElementById('aws-region').value,
-            sessionToken: document.getElementById('aws-session-token').value
-          },
-          google: {
-            apiKey: document.getElementById('google-api-key').value,
-            modelId: document.getElementById('google-model').value
-          }
-        };
-        
-        vscode.postMessage(config);
-      });
+        (function() {
+            // Handle provider selection change
+            const providerSelect = document.getElementById('provider-select');
+            const awsConfig = document.getElementById('aws-config');
+            const googleConfig = document.getElementById('google-config');
+            
+            providerSelect.addEventListener('change', function() {
+                const provider = providerSelect.value;
+                awsConfig.style.display = provider === 'aws-bedrock' ? 'block' : 'none';
+                googleConfig.style.display = provider === 'google-gemini' ? 'block' : 'none';
+            });
+            
+            // Handle tab switching
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const tabId = this.getAttribute('data-tab');
+                    
+                    // Update active tab button
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Show selected tab content
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                        if (content.id === tabId) {
+                            content.classList.add('active');
+                        }
+                    });
+                });
+            });
+            
+            // Handle template source selection
+            const templateSourceSelect = document.getElementById('template-source');
+            templateSourceSelect.addEventListener('change', function() {
+                const source = templateSourceSelect.value;
+                const customTab = document.querySelector('[data-tab="custom-template"]');
+                const defaultTab = document.querySelector('[data-tab="default-template"]');
+                
+                if (source === 'custom') {
+                    customTab.click();
+                } else if (source === 'default') {
+                    defaultTab.click();
+                }
+            });
+            
+            // Handle save configuration button
+            document.getElementById('save-config').addEventListener('click', function() {
+                const provider = providerSelect.value;
+                const templateSource = templateSourceSelect.value;
+                
+                let config = {
+                    command: 'saveConfiguration',
+                    provider: provider,
+                    templateSource: templateSource
+                };
+                
+                if (provider === 'aws-bedrock') {
+                    config.awsAccessKeyId = document.getElementById('aws-access-key').value;
+                    config.awsSecretAccessKey = document.getElementById('aws-secret-key').value;
+                    config.awsRegion = document.getElementById('aws-region').value;
+                    config.awsSessionToken = document.getElementById('aws-session-token').value;
+                } else if (provider === 'google-gemini') {
+                    config.googleApiKey = document.getElementById('google-api-key').value;
+                    config.googleModel = document.getElementById('google-model').value;
+                }
+                
+                vscode.postMessage(config);
+            });
+            
+            // Handle custom template actions
+            document.getElementById('save-custom-template').addEventListener('click', function() {
+                const template = document.getElementById('custom-template-content').value;
+                vscode.postMessage({
+                    command: 'saveCustomTemplate',
+                    template: template
+                });
+            });
+            
+            document.getElementById('delete-custom-template').addEventListener('click', function() {
+                vscode.postMessage({
+                    command: 'deleteCustomTemplate'
+                });
+                document.getElementById('custom-template-content').value = '';
+            });
+            
+            // Handle default template actions
+            document.getElementById('save-default-template').addEventListener('click', function() {
+                const template = document.getElementById('default-template-content').value;
+                vscode.postMessage({
+                    command: 'saveDefaultTemplate',
+                    template: template
+                });
+            });
+            
+            document.getElementById('reset-default-template').addEventListener('click', function() {
+                vscode.postMessage({
+                    command: 'resetDefaultTemplate'
+                });
+            });
+            
+            // Initialize the template source tabs
+            const source = templateSourceSelect.value;
+            if (source === 'custom') {
+                document.querySelector('[data-tab="custom-template"]').click();
+            } else if (source === 'default') {
+                document.querySelector('[data-tab="default-template"]').click();
+            }
+        })();
     </script>
-  </body>
-  </html>`;
+</body>
+</html>`;
+}
+
+/**
+ * Function to update the provider config panel with current settings
+ */
+function updateProviderConfigPanel() {
+  if (!providerConfigPanel) {
+    return;
+  }
+
+  const config = vscode.workspace.getConfiguration('gitAIAssistant');
+  const currentProvider = config.get<string>('modelProvider', 'aws-bedrock');
+  const templateSource = config.get<string>('templateSource', 'repository');
+  const defaultTemplate = config.get<string>('defaultTemplate', '');
+  const customTemplate = templateManager.getCustomTemplate() || '';
+
+  const awsAccessKeyId = config.get<string>('awsAccessKeyId', '');
+  const awsSecretAccessKey = config.get<string>('awsSecretAccessKey', '');
+  const awsRegion = config.get<string>('awsRegion', 'us-east-1');
+  const awsSessionToken = config.get<string>('awsSessionToken', '');
+  
+  const googleApiKey = config.get<string>('googleApiKey', '');
+  const googleModel = config.get<string>('googleGeminiModel', 'gemini-pro');
+
+  providerConfigPanel.webview.html = getProviderConfigWebviewContent(
+    currentProvider,
+    awsAccessKeyId,
+    awsSecretAccessKey,
+    awsRegion,
+    awsSessionToken,
+    googleApiKey,
+    googleModel,
+    templateSource,
+    customTemplate,
+    defaultTemplate
+  );
 }
 
 /**

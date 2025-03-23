@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { suite, test } from 'mocha';
-import { TemplateManager } from '../../templateManager';
+import { TemplateManager, TemplateSource } from '../../templateManager';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
@@ -21,11 +21,14 @@ suite('TemplateManager Tests', () => {
     // Create a stub for VS Code workspace configurations
     const getConfigurationStub = sinon.stub(vscode.workspace, 'getConfiguration');
     const mockConfiguration = {
-      get: sinon.stub().callsFake((key: string) => {
-        if (key === 'defaultPRTemplate') {
+      get: sinon.stub().callsFake((key: string, defaultValue?: any) => {
+        if (key === 'defaultTemplate') {
           return defaultTemplate;
         }
-        return undefined;
+        if (key === 'templateSource') {
+          return defaultValue || TemplateSource.Repository;
+        }
+        return defaultValue || undefined;
       })
     };
     getConfigurationStub.returns(mockConfiguration as any);
@@ -59,12 +62,12 @@ suite('TemplateManager Tests', () => {
     assert.strictEqual((mockContext.globalState.get as sinon.SinonStub).calledOnce, true);
   });
   
-  test('saveTemplate should save the template to global state', async () => {
+  test('saveCustomTemplate should save the template to global state', async () => {
     // Arrange
     const newTemplate = 'New PR Template';
     
     // Act
-    await templateManager.saveTemplate(newTemplate);
+    templateManager.saveCustomTemplate(newTemplate);
     
     // Assert
     assert.strictEqual((mockContext.globalState.update as sinon.SinonStub).calledOnce, true);
