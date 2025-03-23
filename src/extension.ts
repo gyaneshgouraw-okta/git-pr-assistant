@@ -126,6 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
                 // Save general settings
                 await config.update('modelProvider', provider, vscode.ConfigurationTarget.Global);
                 await config.update('templateSource', templateSource, vscode.ConfigurationTarget.Global);
+                console.log(`Saved template source: ${templateSource}`);
                 
                 if (provider === 'aws-bedrock') {
                   // Save AWS settings
@@ -150,6 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
                 templateManager.saveCustomTemplate(message.template);
                 // Update template source to 'custom'
                 await config.update('templateSource', 'custom', vscode.ConfigurationTarget.Global);
+                console.log('Saved custom template and set template source to custom');
                 vscode.window.showInformationMessage('Custom template saved successfully');
                 treeDataProvider.refresh();
                 
@@ -162,24 +164,10 @@ export function activate(context: vscode.ExtensionContext) {
               case 'deleteCustomTemplate':
                 // Delete custom template from extension global state
                 templateManager.deleteCustomTemplate();
+                // Set template source to 'default'
+                await config.update('templateSource', 'default', vscode.ConfigurationTarget.Global);
+                console.log('Deleted custom template and set template source to default');
                 vscode.window.showInformationMessage('Custom template deleted');
-                
-                // Refresh webview
-                if (providerConfigPanel) {
-                  updateProviderConfigPanel();
-                }
-                break;
-                
-              case 'saveDefaultTemplate':
-                // Save default template to global settings
-                await config.update('defaultTemplate', message.template, vscode.ConfigurationTarget.Global);
-                vscode.window.showInformationMessage('Default template saved successfully');
-                break;
-                
-              case 'resetDefaultTemplate':
-                // Reset default template to the extension's built-in default
-                await config.update('defaultTemplate', '', vscode.ConfigurationTarget.Global);
-                vscode.window.showInformationMessage('Default template reset to extension default');
                 
                 // Refresh webview
                 if (providerConfigPanel) {
@@ -533,8 +521,6 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
     let templateDisplay = 'Default';
     if (templateSource === 'custom') {
       templateDisplay = 'Custom';
-    } else if (templateSource === 'repository') {
-      templateDisplay = 'Repository';
     }
     
     // Create the root elements
@@ -861,32 +847,12 @@ function getProviderConfigWebviewContent(
         button:hover {
             background-color: var(--vscode-button-hoverBackground);
         }
-        .tab-container {
-            margin-bottom: 20px;
-        }
-        .tab-buttons {
-            display: flex;
-            margin-bottom: 10px;
-        }
-        .tab-button {
-            padding: 8px 16px;
-            background: none;
+        .custom-template-section {
+            margin-top: 15px;
+            padding: 15px;
             border: 1px solid var(--vscode-panel-border);
-            border-bottom: none;
-            cursor: pointer;
-            margin-right: 5px;
-        }
-        .tab-button.active {
-            background-color: var(--vscode-tab-activeBackground);
-            color: var(--vscode-tab-activeForeground);
-        }
-        .tab-content {
-            display: none;
-            padding: 20px;
-            border: 1px solid var(--vscode-panel-border);
-        }
-        .tab-content.active {
-            display: block;
+            border-radius: 5px;
+            display: ${templateSource === 'custom' ? 'block' : 'none'};
         }
     </style>
 </head>
@@ -944,44 +910,27 @@ function getProviderConfigWebviewContent(
         <div class="field">
             <label for="template-source">Template Source:</label>
             <select id="template-source">
-                <option value="custom" ${templateSource === 'custom' ? 'selected' : ''}>Custom Template</option>
-                <option value="repository" ${templateSource === 'repository' ? 'selected' : ''}>Repository Template</option>
                 <option value="default" ${templateSource === 'default' ? 'selected' : ''}>Default Template</option>
+                <option value="custom" ${templateSource === 'custom' ? 'selected' : ''}>Custom Template</option>
             </select>
         </div>
         
-        <div class="tab-container">
-            <div class="tab-buttons">
-                <button class="tab-button ${templateSource === 'custom' ? 'active' : ''}" data-tab="custom-template">Custom Template</button>
-                <button class="tab-button ${templateSource === 'default' ? 'active' : ''}" data-tab="default-template">Default Template</button>
+        <div id="custom-template-section" class="custom-template-section">
+            <div class="field">
+                <label for="custom-template-content">Custom Template:</label>
+                <textarea id="custom-template-content" placeholder="Enter your custom PR template here">${customTemplate || ''}</textarea>
             </div>
-            
-            <div id="custom-template" class="tab-content ${templateSource === 'custom' ? 'active' : ''}">
-                <div class="field">
-                    <label for="custom-template-content">Custom Template:</label>
-                    <textarea id="custom-template-content" placeholder="Enter your custom PR template here">${customTemplate || ''}</textarea>
-                </div>
-                <div>
-                    <button id="save-custom-template">Save Custom Template</button>
-                    <button id="delete-custom-template">Delete Custom Template</button>
-                </div>
-            </div>
-            
-            <div id="default-template" class="tab-content ${templateSource === 'default' ? 'active' : ''}">
-                <div class="field">
-                    <label for="default-template-content">Default Template:</label>
-                    <textarea id="default-template-content" placeholder="Enter your default PR template here">${defaultTemplate || ''}</textarea>
-                </div>
-                <div>
-                    <button id="save-default-template">Save Default Template</button>
-                    <button id="reset-default-template">Reset to Extension Default</button>
-                </div>
+            <div>
+                <button id="save-custom-template">Save Custom Template</button>
+                <button id="delete-custom-template">Delete Custom Template</button>
             </div>
         </div>
     </div>
 
     <script>
         (function() {
+            const vscode = acquireVsCodeApi();
+            
             // Handle provider selection change
             const providerSelect = document.getElementById('provider-select');
             const awsConfig = document.getElementById('aws-config');
@@ -993,40 +942,13 @@ function getProviderConfigWebviewContent(
                 googleConfig.style.display = provider === 'google-gemini' ? 'block' : 'none';
             });
             
-            // Handle tab switching
-            const tabButtons = document.querySelectorAll('.tab-button');
-            const tabContents = document.querySelectorAll('.tab-content');
-            
-            tabButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const tabId = this.getAttribute('data-tab');
-                    
-                    // Update active tab button
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    // Show selected tab content
-                    tabContents.forEach(content => {
-                        content.classList.remove('active');
-                        if (content.id === tabId) {
-                            content.classList.add('active');
-                        }
-                    });
-                });
-            });
-            
             // Handle template source selection
             const templateSourceSelect = document.getElementById('template-source');
+            const customTemplateSection = document.getElementById('custom-template-section');
+            
             templateSourceSelect.addEventListener('change', function() {
                 const source = templateSourceSelect.value;
-                const customTab = document.querySelector('[data-tab="custom-template"]');
-                const defaultTab = document.querySelector('[data-tab="default-template"]');
-                
-                if (source === 'custom') {
-                    customTab.click();
-                } else if (source === 'default') {
-                    defaultTab.click();
-                }
+                customTemplateSection.style.display = source === 'custom' ? 'block' : 'none';
             });
             
             // Handle save configuration button
@@ -1068,29 +990,6 @@ function getProviderConfigWebviewContent(
                 });
                 document.getElementById('custom-template-content').value = '';
             });
-            
-            // Handle default template actions
-            document.getElementById('save-default-template').addEventListener('click', function() {
-                const template = document.getElementById('default-template-content').value;
-                vscode.postMessage({
-                    command: 'saveDefaultTemplate',
-                    template: template
-                });
-            });
-            
-            document.getElementById('reset-default-template').addEventListener('click', function() {
-                vscode.postMessage({
-                    command: 'resetDefaultTemplate'
-                });
-            });
-            
-            // Initialize the template source tabs
-            const source = templateSourceSelect.value;
-            if (source === 'custom') {
-                document.querySelector('[data-tab="custom-template"]').click();
-            } else if (source === 'default') {
-                document.querySelector('[data-tab="default-template"]').click();
-            }
         })();
     </script>
 </body>

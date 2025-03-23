@@ -26,7 +26,7 @@ suite('TemplateManager Tests', () => {
           return defaultTemplate;
         }
         if (key === 'templateSource') {
-          return defaultValue || TemplateSource.Repository;
+          return defaultValue || TemplateSource.Default;
         }
         return defaultValue || undefined;
       })
@@ -40,19 +40,29 @@ suite('TemplateManager Tests', () => {
     sinon.restore();
   });
   
-  test('getTemplate should return the default template if no custom template exists', async () => {
+  test('getTemplate should return the default template if template source is default', async () => {
     // Act
     const template = await templateManager.getTemplate();
     
     // Assert
-    assert.strictEqual(template, defaultTemplate);
-    assert.strictEqual((mockContext.globalState.get as sinon.SinonStub).calledOnce, true);
+    assert.strictEqual(template, templateManager.getDefaultTemplate());
   });
   
-  test('getTemplate should return the custom template if it exists', async () => {
+  test('getTemplate should return the custom template if it exists and template source is custom', async () => {
     // Arrange
     const customTemplate = 'Custom PR Template';
     (mockContext.globalState.get as sinon.SinonStub).returns(customTemplate);
+    
+    // Mock configuration to return custom as template source
+    const getConfigurationStub = vscode.workspace.getConfiguration as sinon.SinonStub;
+    getConfigurationStub.returns({
+      get: sinon.stub().callsFake((key: string, defaultValue?: any) => {
+        if (key === 'templateSource') {
+          return TemplateSource.Custom;
+        }
+        return defaultValue || undefined;
+      })
+    });
     
     // Act
     const template = await templateManager.getTemplate();

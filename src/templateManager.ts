@@ -19,7 +19,6 @@ const PR_TEMPLATE_PATHS = [
  */
 export enum TemplateSource {
   Custom = 'custom',
-  Repository = 'repository',
   Default = 'default'
 }
 
@@ -57,7 +56,7 @@ Add any other context about the PR here.`;
    */
   async getTemplate(workspaceFolder?: vscode.WorkspaceFolder): Promise<string> {
     const config = vscode.workspace.getConfiguration('gitAIAssistant');
-    const templateSource = config.get<string>('templateSource', TemplateSource.Repository);
+    const templateSource = config.get<string>('templateSource', TemplateSource.Default);
 
     switch (templateSource) {
       case TemplateSource.Custom:
@@ -67,19 +66,9 @@ Add any other context about the PR here.`;
         }
         return this.DEFAULT_TEMPLATE;
       
-      case TemplateSource.Repository:
-        if (workspaceFolder) {
-          const repoTemplate = await this.findRepoTemplate(workspaceFolder);
-          if (repoTemplate) {
-            return repoTemplate;
-          }
-        }
-        return this.DEFAULT_TEMPLATE;
-      
       case TemplateSource.Default:
       default:
-        const defaultTemplate = config.get<string>('defaultTemplate', '');
-        return defaultTemplate || this.DEFAULT_TEMPLATE;
+        return this.DEFAULT_TEMPLATE;
     }
   }
 
