@@ -252,3 +252,67 @@ This will automatically detect your editor (VS Code or Cursor) and handle the un
 ## License
 
 MIT 
+
+# Git AI Assistant Diagrams
+
+This directory contains a set of diagrams that illustrate the architecture and workflow of the Git AI Assistant VS Code extension. These diagrams are provided in DrawIO (diagrams.net) format, which allows for easy editing and customization.
+
+## Available Diagrams
+
+1. **Architecture Overview** (`architecture-overview.drawio`)
+   - Shows the main components of the Git AI Assistant and how they interact
+   - Visualizes the relationship between core modules like GitDiffReader, TemplateManager, and AIServiceFactory
+
+2. **PR Description Generation Flow** (`pr-description-flow.drawio`)
+   - Illustrates the sequential steps when generating a PR description
+   - Shows data flow from user command through various components to final output
+
+3. **Configuration UI Flow** (`configuration-ui-flow.drawio`)
+   - Demonstrates how users interact with the configuration interface
+   - Shows navigation between different configuration screens and settings persistence
+
+4. **Component Message Flow** (`component-message-flow.drawio`)
+   - Depicts how messages and data are exchanged between components
+   - Highlights the communication paths between UI, core modules, and VS Code settings
+
+5. **HTML Visualization** (`git-ai-assistant-diagrams.html`)
+   - A standalone HTML file containing rendered versions of all diagrams
+   - Useful for quick reference without needing to open an editor
+
+## How to Use These Diagrams
+
+### Viewing Diagrams
+
+1. **HTML Version**: 
+   - Open `git-ai-assistant-diagrams.html` in any web browser for a quick visual reference
+
+2. **DrawIO Files**:
+   - Open any `.drawio` file using [diagrams.net](https://app.diagrams.net/) (online or desktop app)
+   - You can also use the DrawIO VS Code extension to view and edit diagrams directly in VS Code
+
+### Editing Diagrams
+
+1. Using diagrams.net website:
+   - Go to [diagrams.net](https://app.diagrams.net/)
+   - Click "Open Existing Diagram" and select the .drawio file
+   - Make your changes and save
+
+2. Using the desktop app:
+   - Download [Draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases)
+   - Open the app and open the .drawio file
+   - Edit and save as needed
+
+3. Using VS Code:
+   - Install the DrawIO VS Code extension
+   - Open the .drawio file directly in VS Code
+   - Make changes and save
+
+## Purpose of These Diagrams
+
+These diagrams serve as both documentation and learning tools:
+
+- **For New Developers**: Quickly understand the overall structure and flow of the application
+- **For Existing Team**: Reference for discussing changes and enhancements
+- **For Documentation**: Visual aids to include in user and developer documentation
+
+Feel free to update and extend these diagrams as the application evolves! 
