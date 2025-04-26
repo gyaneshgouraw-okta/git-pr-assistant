@@ -2,7 +2,7 @@
   "name": "git-ai-assistant",
   "displayName": "Git AI Assistant",
   "description": "A VS Code extension that generates PR descriptions and commit messages using AI",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.60.0"
   },
