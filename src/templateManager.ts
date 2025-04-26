@@ -28,23 +28,30 @@ export enum TemplateSource {
 export class TemplateManager {
   private readonly context: vscode.ExtensionContext;
   private readonly TEMPLATE_STORAGE_KEY = 'prTemplate';
-  private readonly DEFAULT_TEMPLATE = `## Description
-Briefly describe the changes you've made and the problem it solves.
+  private readonly DEFAULT_TEMPLATE = `[INSTRUCTIONS: Generate PR description following this template. Remove all text in <angle brackets> and replace with actual content. DO NOT include these instructions or any placeholder text in the final output. Use single sentences]
 
-## Related Issues
-List any related issues this PR resolves or is connected to.
+## 📝 Pull Request Description
 
-## Changes
-Describe the key changes in this PR.
+### 🔄 Changes
+- <Point 1 about changes>
+- <Point 2 about changes>
+- <Point 3 about changes>
 
-## Testing
-Explain how you tested these changes.
+### 🧪 Testing
+- <Point 1: What was tested>
+- <Point 2: How it was tested>
+- <Point 3: Test results>
 
-## Screenshots
-If applicable, add screenshots to help explain your changes.
+### 💥 Impact
+- <Point 1: Customer impact>
+- <Point 2: System impact>
+- <Point 3: Performance impact>
 
-## Additional Notes
-Add any other context about the PR here.`;
+### 📋 Checklist
+- [ ] Code follows the project's coding standards
+- [ ] Tests have been added/updated
+- [ ] Documentation has been updated
+- [ ] All tests are passing`;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
