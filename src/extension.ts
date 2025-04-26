@@ -122,11 +122,15 @@ export function activate(context: vscode.ExtensionContext) {
               case 'saveConfiguration':
                 const provider = message.provider;
                 const templateSource = message.templateSource;
+                const diffSource = message.diffSource || 'staged';
+                const commitCount = message.commitCount || 1;
                 
                 // Save general settings
                 await config.update('modelProvider', provider, vscode.ConfigurationTarget.Global);
                 await config.update('templateSource', templateSource, vscode.ConfigurationTarget.Global);
-                console.log(`Saved template source: ${templateSource}`);
+                await config.update('diffSource', diffSource, vscode.ConfigurationTarget.Global);
+                await config.update('commitCount', commitCount, vscode.ConfigurationTarget.Global);
+                console.log(`Saved settings - template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
                 
                 if (provider === 'aws-bedrock') {
                   // Save AWS settings
@@ -367,16 +371,26 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('Generate PR Description command triggered');
     
     try {
+      // Get configuration for diff source and commit count
+      const config = vscode.workspace.getConfiguration('gitAIAssistant');
+      const diffSource = config.get<string>('diffSource', 'staged');
+      const commitCount = config.get<number>('commitCount', 1);
+      
+      console.log(`Using diff source: ${diffSource}, commit count: ${commitCount}`);
+      
       // Get git diff
       console.log('Creating GitDiffReader instance...');
       const gitDiffReader = new GitDiffReader();
       console.log('Calling getDiff()...');
-      const diff = await gitDiffReader.getDiff();
+      const diff = await gitDiffReader.getDiff(diffSource, commitCount);
       console.log('getDiff() returned:', diff ? `diff of length ${diff.length}` : 'null');
       
       if (!diff) {
-        console.log('No diff detected, showing info message');
-        vscode.window.showInformationMessage('No changes detected. Make sure you have staged changes using "git add" command.');
+        if (diffSource === 'staged') {
+          vscode.window.showInformationMessage('No staged changes detected. Make sure you have staged changes using "git add" command.');
+        } else {
+          vscode.window.showInformationMessage(`No changes found in the last ${commitCount} commit(s). Try increasing the commit count.`);
+        }
         return;
       }
       
@@ -796,6 +810,8 @@ function getProviderConfigWebviewContent(
 ): string {
   // Get current configuration
   const config = vscode.workspace.getConfiguration('gitAIAssistant');
+  const diffSource = config.get<string>('diffSource', 'staged');
+  const commitCount = config.get<number>('commitCount', 1);
   
   return `
   <!DOCTYPE html>
@@ -834,11 +850,25 @@ function getProviderConfigWebviewContent(
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
         }
+        input[type="radio"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        .radio-label {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 15px;
+        }
         textarea {
             min-height: 200px;
             font-family: monospace;
         }
         .template-section {
+            margin-top: 30px;
+            border-top: 1px solid var(--vscode-panel-border);
+            padding-top: 20px;
+        }
+        .diff-source-section {
             margin-top: 30px;
             border-top: 1px solid var(--vscode-panel-border);
             padding-top: 20px;
@@ -860,6 +890,10 @@ function getProviderConfigWebviewContent(
             border: 1px solid var(--vscode-panel-border);
             border-radius: 5px;
             display: ${templateSource === 'custom' ? 'block' : 'none'};
+        }
+        .commit-count-field {
+            margin-top: 15px;
+            display: ${diffSource === 'commits' ? 'block' : 'none'};
         }
     </style>
 </head>
@@ -909,7 +943,27 @@ function getProviderConfigWebviewContent(
         </div>
     </div>
     
-    <button id="save-config">Save Configuration</button>
+    <div class="diff-source-section">
+        <h2>PR Description Source</h2>
+        <div class="field">
+            <label>Diff Source:</label>
+            <div>
+                <label class="radio-label">
+                    <input type="radio" name="diff-source" value="staged" ${diffSource === 'staged' ? 'checked' : ''}>
+                    Staged Changes
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="diff-source" value="commits" ${diffSource === 'commits' ? 'checked' : ''}>
+                    Recent Commits
+                </label>
+            </div>
+        </div>
+        
+        <div id="commit-count-field" class="field commit-count-field">
+            <label for="commit-count">Number of Recent Commits:</label>
+            <input type="number" id="commit-count" value="${commitCount}" min="1" max="20" step="1">
+        </div>
+    </div>
     
     <div class="template-section">
         <h2>PR Template Configuration</h2>
@@ -933,6 +987,8 @@ function getProviderConfigWebviewContent(
             </div>
         </div>
     </div>
+
+    <button id="save-config">Save Configuration</button>
 
     <script>
         (function() {
@@ -958,15 +1014,40 @@ function getProviderConfigWebviewContent(
                 customTemplateSection.style.display = source === 'custom' ? 'block' : 'none';
             });
             
+            // Handle diff source selection
+            const diffSourceRadios = document.getElementsByName('diff-source');
+            const commitCountField = document.getElementById('commit-count-field');
+            
+            for (const radio of diffSourceRadios) {
+                radio.addEventListener('change', function() {
+                    const source = this.value;
+                    commitCountField.style.display = source === 'commits' ? 'block' : 'none';
+                });
+            }
+            
             // Handle save configuration button
             document.getElementById('save-config').addEventListener('click', function() {
                 const provider = providerSelect.value;
                 const templateSource = templateSourceSelect.value;
                 
+                // Get selected diff source
+                let diffSource = 'staged';
+                for (const radio of diffSourceRadios) {
+                    if (radio.checked) {
+                        diffSource = radio.value;
+                        break;
+                    }
+                }
+                
+                // Get commit count
+                const commitCount = parseInt(document.getElementById('commit-count').value, 10) || 1;
+                
                 let config = {
                     command: 'saveConfiguration',
                     provider: provider,
-                    templateSource: templateSource
+                    templateSource: templateSource,
+                    diffSource: diffSource,
+                    commitCount: commitCount
                 };
                 
                 if (provider === 'aws-bedrock') {
@@ -1016,6 +1097,8 @@ function updateProviderConfigPanel() {
   const templateSource = config.get<string>('templateSource', 'repository');
   const defaultTemplate = config.get<string>('defaultTemplate', '');
   const customTemplate = templateManager.getCustomTemplate() || '';
+  const diffSource = config.get<string>('diffSource', 'staged');
+  const commitCount = config.get<number>('commitCount', 1);
 
   const awsAccessKeyId = config.get<string>('awsAccessKeyId', '');
   const awsSecretAccessKey = config.get<string>('awsSecretAccessKey', '');

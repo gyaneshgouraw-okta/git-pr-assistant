@@ -147,6 +147,19 @@
           "type": "string",
           "default": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n",
           "description": "Default PR template to use when no repository template is found"
+        },
+        "gitAIAssistant.diffSource": {
+          "type": "string",
+          "enum": ["staged", "commits"],
+          "default": "staged",
+          "description": "Source for the git diff: staged changes or recent commits"
+        },
+        "gitAIAssistant.commitCount": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Number of recent commits to include in the diff when using 'commits' as diff source"
         }
       }
     }
