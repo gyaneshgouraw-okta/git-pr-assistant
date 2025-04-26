@@ -533,7 +533,8 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
           command: 'git-ai-assistant.generatePRDescription',
           title: 'Generate PR Description',
           arguments: []
-        }
+        },
+        'git-pull-request'
       ),
       new TreeItem(
         `Configure Settings (Provider: ${providerDisplay}, Template: ${templateDisplay})`,
@@ -543,7 +544,8 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
           command: 'git-ai-assistant.configureProvider',
           title: 'Configure Settings',
           arguments: []
-        }
+        },
+        'gear'
       )
     ]);
   }
@@ -557,13 +559,18 @@ class TreeItem extends vscode.TreeItem {
     public readonly label: string,
     public readonly tooltip: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-    public readonly command?: vscode.Command
+    public readonly command?: vscode.Command,
+    iconName?: string
   ) {
     super(label, collapsibleState);
     this.tooltip = tooltip;
     
     if (command) {
       this.command = command;
+    }
+    
+    if (iconName) {
+      this.iconPath = new vscode.ThemeIcon(iconName);
     }
   }
 }
