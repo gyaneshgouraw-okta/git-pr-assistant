@@ -49,6 +49,32 @@ A VS Code extension that generates PR descriptions and commit messages using AI 
 
 This extension supports multiple AI providers that you can configure:
 
+### Diff Source Configuration
+
+You can choose between two sources for generating PR descriptions:
+
+1. **Staged Changes** (default): Uses the currently staged changes in your git repository
+2. **Recent Commits**: Uses a specific number of recent commits
+
+#### Using the Configuration UI
+
+1. Click on "Configure Settings" in the sidebar panel
+2. Scroll down to the "PR Description Source" section
+3. Select either "Staged Changes" or "Recent Commits"
+4. If you select "Recent Commits", specify the number of commits to include (1-20)
+5. Click "Save Configuration"
+
+#### Using Settings
+
+You can also configure these settings in VS Code settings:
+
+```json
+{
+  "gitAIAssistant.diffSource": "staged", // or "commits"
+  "gitAIAssistant.commitCount": 1 // Number of commits to consider when diffSource is "commits"
+}
+```
+
 ### AWS Bedrock
 
 #### Using the Configuration UI
