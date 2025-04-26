@@ -205,7 +205,7 @@
     "ai": "^4.2.0",
     "aws-sdk": "^2.1692.0"
   },
-  "publisher": "your-publisher-name",
+  "publisher": "gyaneshgouraw",
   "repository": {
     "type": "git",
     "url": "https://github.com/your-username/git-ai-assistant.git"
