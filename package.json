@@ -21,7 +21,7 @@
         {
           "id": "git-ai-assistant",
           "title": "Git AI Assistant",
-          "icon": "resources/icon.svg"
+          "icon": "resources/sidebar-icon.svg"
         }
       ]
     },
