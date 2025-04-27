@@ -751,6 +751,22 @@ function getGoogleCredentialsWebviewContent(apiKey: string, modelId: string): st
       .field {
         margin-bottom: 16px;
       }
+      .help-text {
+        margin-top: 8px;
+        font-size: 0.9em;
+        color: var(--vscode-descriptionForeground);
+      }
+      .api-key-link {
+        color: var(--vscode-textLink-foreground);
+        text-decoration: underline;
+      }
+      .api-key-link:hover {
+        color: var(--vscode-textLink-activeForeground);
+      }
+      .note {
+        font-style: italic;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
@@ -761,6 +777,10 @@ function getGoogleCredentialsWebviewContent(apiKey: string, modelId: string): st
       <div class="field">
         <label for="apiKey">Google API Key</label>
         <input type="password" id="apiKey" value="${apiKey}" placeholder="Enter your Google API Key" />
+        <div class="help-text">
+          <p>Need an API key? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-key-link">Generate Gemini API Key</a></p>
+          <p class="note">Note: You'll need to sign in to your Google account to generate the API key.</p>
+        </div>
       </div>
       
       <div class="field">
@@ -895,6 +915,22 @@ function getProviderConfigWebviewContent(
             margin-top: 15px;
             display: ${diffSource === 'commits' ? 'block' : 'none'};
         }
+        .help-text {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: var(--vscode-descriptionForeground);
+        }
+        .api-key-link {
+            color: var(--vscode-textLink-foreground);
+            text-decoration: underline;
+        }
+        .api-key-link:hover {
+            color: var(--vscode-textLink-activeForeground);
+        }
+        .note {
+            font-style: italic;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -933,6 +969,10 @@ function getProviderConfigWebviewContent(
         <div class="field">
             <label for="google-api-key">API Key:</label>
             <input type="password" id="google-api-key" value="${googleApiKey}" placeholder="Enter Google API Key">
+            <div class="help-text">
+              <p>Need an API key? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-key-link">Generate Gemini API Key</a></p>
+              <p class="note">Note: You'll need to sign in to your Google account to generate the API key.</p>
+            </div>
         </div>
         <div class="field">
             <label for="google-model">Model:</label>
