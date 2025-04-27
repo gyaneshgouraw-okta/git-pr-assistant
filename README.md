@@ -2,6 +2,7 @@
 
 A VS Code extension that generates PR descriptions and commit messages using AI (AWS Bedrock Claude or Google Gemini).
 
+   ![Git-Ai-Assistant](resources/final-view.gif)
 ## Features
 
 - Automatically generates PR descriptions based on your local git diffs
@@ -55,11 +56,14 @@ This extension supports multiple AI providers that you can configure:
 1.  Get an API key for Gemini here: https://aistudio.google.com/apikey
 2. Click on "Configure Google Credentials" in the sidebar panel
 3. Enter your Google API Key
+
 4. Select your preferred Gemini model:
    - Gemini 1.5 Flash (default)
    - Gemini 1.5 Flash 8B (smaller model)
    - Gemini 2.0 Flash (experimental)
 5. Click "Save Credentials & Use Google Gemini"
+
+   ![API Key Configuration](resources/aprovider-generate.gif)
 
 #### Using Settings
 
