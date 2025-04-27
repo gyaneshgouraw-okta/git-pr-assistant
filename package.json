@@ -98,7 +98,7 @@
         "gitAIAssistant.modelProvider": {
           "type": "string",
           "enum": ["aws-bedrock", "google-gemini"],
-          "default": "aws-bedrock",
+          "default": "google-gemini",
           "description": "The AI model provider to use for generating PR descriptions"
         },
         "gitAIAssistant.useRepoTemplate": {

@@ -91,7 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Get current configuration
         const config = vscode.workspace.getConfiguration('gitAIAssistant');
-        const provider = config.get<string>('modelProvider') || 'aws-bedrock';
+        const provider = config.get<string>('modelProvider') || 'google-gemini';
         const awsAccessKeyId = config.get<string>('awsAccessKeyId') || '';
         const awsSecretAccessKey = config.get<string>('awsSecretAccessKey') || '';
         const awsRegion = config.get<string>('awsRegion') || 'us-east-1';
@@ -416,7 +416,7 @@ export function activate(context: vscode.ExtensionContext) {
           
           // Get configuration
           const config = vscode.workspace.getConfiguration('gitAIAssistant');
-          const modelProvider = config.get<string>('modelProvider') || 'aws-bedrock';
+          const modelProvider = config.get<string>('modelProvider') || 'google-gemini';
           console.log('Using model provider:', modelProvider);
           
           // Create the appropriate AI service based on the provider
@@ -522,14 +522,11 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
     
     // Get the current model provider configuration
     const config = vscode.workspace.getConfiguration('gitAIAssistant');
-    const provider = config.get<string>('modelProvider', 'aws-bedrock');
+    const provider = config.get<string>('modelProvider', 'google-gemini');
     const templateSource = config.get<string>('templateSource', 'default');
     
     // Format the provider name for display
-    let providerDisplay = 'AWS Bedrock';
-    if (provider === 'google-gemini') {
-      providerDisplay = 'Google Gemini';
-    }
+    let providerDisplay = 'Google Gemini';
     
     // Format the template source for display
     let templateDisplay = 'Default';
@@ -939,8 +936,8 @@ function getProviderConfigWebviewContent(
     <div class="provider-selector">
         <label for="provider-select">Select AI Provider:</label>
         <select id="provider-select">
-            <option value="aws-bedrock" ${currentProvider === 'aws-bedrock' ? 'selected' : ''}>AWS Bedrock</option>
             <option value="google-gemini" ${currentProvider === 'google-gemini' ? 'selected' : ''}>Google Gemini</option>
+            <option value="aws-bedrock" ${currentProvider === 'aws-bedrock' ? 'selected' : ''}>AWS Bedrock</option>
         </select>
     </div>
     
@@ -1133,7 +1130,7 @@ function updateProviderConfigPanel() {
   }
 
   const config = vscode.workspace.getConfiguration('gitAIAssistant');
-  const currentProvider = config.get<string>('modelProvider', 'aws-bedrock');
+  const currentProvider = config.get<string>('modelProvider', 'google-gemini');
   const templateSource = config.get<string>('templateSource', 'repository');
   const defaultTemplate = config.get<string>('defaultTemplate', '');
   const customTemplate = templateManager.getCustomTemplate() || '';
