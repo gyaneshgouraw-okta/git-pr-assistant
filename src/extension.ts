@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 import { GitDiffReader } from './gitDiffReader';
 import { TemplateManager } from './templateManager';
-import { AIServiceFactory } from './aiService';
+import { CopilotAIService } from './copilotService';
 
 // Track the webview panels
-let awsCredentialsPanel: vscode.WebviewPanel | undefined = undefined;
-let googleCredentialsPanel: vscode.WebviewPanel | undefined = undefined;
 let providerConfigPanel: vscode.WebviewPanel | undefined = undefined;
 
 // Store the extension context for access throughout the module
@@ -23,10 +21,13 @@ export function activate(context: vscode.ExtensionContext) {
   
   // Store context for global access
   extensionContext = context;
-  
+
   // Initialize the template manager
   templateManager = new TemplateManager(context);
-  
+
+  // Check Copilot availability
+  checkCopilotAvailability();
+
   console.log('Git AI Assistant is now active');
   console.log(`Activation events: ${context.extension.packageJSON.activationEvents}`);
   console.log(`Commands: ${JSON.stringify(context.extension.packageJSON.contributes.commands)}`);
@@ -65,12 +66,12 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('Registered test command: git-ai-assistant.testCommand');
 
   // Register the command for the unified provider configuration
-  const configureProviderCommand = vscode.commands.registerCommand('git-ai-assistant.configureProvider', () => {
+  const configureProviderCommand = vscode.commands.registerCommand('git-ai-assistant.configureProvider', async () => {
     console.log('Configure AI Provider command triggered');
-    
+
     // Show a confirmation to verify the command is being called
-    vscode.window.showInformationMessage('Opening AI Provider configuration...', 'OK');
-    
+    vscode.window.showInformationMessage('Opening Configuration...', 'OK');
+
     try {
       if (providerConfigPanel) {
         // If we already have a panel, show it
@@ -81,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
         console.log('Creating new panel');
         providerConfigPanel = vscode.window.createWebviewPanel(
           'aiProviderConfig',
-          'Configure AI Provider',
+          'Git AI Assistant Configuration',
           vscode.ViewColumn.One,
           {
             enableScripts: true,
@@ -91,25 +92,12 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Get current configuration
         const config = vscode.workspace.getConfiguration('gitAIAssistant');
-        const provider = config.get<string>('modelProvider') || 'google-gemini';
-        const awsAccessKeyId = config.get<string>('awsAccessKeyId') || '';
-        const awsSecretAccessKey = config.get<string>('awsSecretAccessKey') || '';
-        const awsRegion = config.get<string>('awsRegion') || 'us-east-1';
-        const awsSessionToken = config.get<string>('awsSessionToken') || '';
-        const googleApiKey = config.get<string>('googleApiKey') || '';
-        const googleGeminiModel = config.get<string>('googleGeminiModel') || 'gemini-1.5-flash';
-        const useRepoTemplate = config.get<boolean>('useRepoTemplate') || false;
+        const copilotModelId = config.get<string>('copilotModelId') || '';
 
         console.log('Setting webview HTML content');
-        // Set webview HTML content
-        providerConfigPanel.webview.html = getProviderConfigWebviewContent(
-          provider,
-          awsAccessKeyId,
-          awsSecretAccessKey,
-          awsRegion,
-          awsSessionToken,
-          googleApiKey,
-          googleGeminiModel,
+        // Set webview HTML content (async)
+        providerConfigPanel.webview.html = await getProviderConfigWebviewContent(
+          copilotModelId,
           config.get<string>('templateSource', 'repository'),
           templateManager.getCustomTemplate() || '',
           config.get<string>('defaultTemplate', '')
@@ -120,33 +108,21 @@ export function activate(context: vscode.ExtensionContext) {
           async (message) => {
             switch (message.command) {
               case 'saveConfiguration':
-                const provider = message.provider;
+                const copilotModelId = message.copilotModelId;
                 const templateSource = message.templateSource;
                 const diffSource = message.diffSource || 'staged';
                 const commitCount = message.commitCount || 1;
-                
-                // Save general settings
-                await config.update('modelProvider', provider, vscode.ConfigurationTarget.Global);
+
+                // Save all settings
+                await config.update('copilotModelId', copilotModelId, vscode.ConfigurationTarget.Global);
                 await config.update('templateSource', templateSource, vscode.ConfigurationTarget.Global);
                 await config.update('diffSource', diffSource, vscode.ConfigurationTarget.Global);
                 await config.update('commitCount', commitCount, vscode.ConfigurationTarget.Global);
-                console.log(`Saved settings - template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
-                
-                if (provider === 'aws-bedrock') {
-                  // Save AWS settings
-                  await config.update('awsAccessKeyId', message.awsAccessKeyId, vscode.ConfigurationTarget.Global);
-                  await config.update('awsSecretAccessKey', message.awsSecretAccessKey, vscode.ConfigurationTarget.Global);
-                  await config.update('awsRegion', message.awsRegion, vscode.ConfigurationTarget.Global);
-                  await config.update('awsSessionToken', message.awsSessionToken, vscode.ConfigurationTarget.Global);
-                  vscode.window.showInformationMessage('AWS Bedrock configuration saved successfully');
-                } else if (provider === 'google-gemini') {
-                  // Save Google settings
-                  await config.update('googleApiKey', message.googleApiKey, vscode.ConfigurationTarget.Global);
-                  await config.update('googleGeminiModel', message.googleModel, vscode.ConfigurationTarget.Global);
-                  vscode.window.showInformationMessage('Google Gemini configuration saved successfully');
-                }
-                
-                // Refresh tree view to show updated provider
+                console.log(`Saved settings - model: ${copilotModelId}, template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
+
+                vscode.window.showInformationMessage('Configuration saved successfully');
+
+                // Refresh tree view to show updated model
                 treeDataProvider.refresh();
                 break;
                 
@@ -202,170 +178,6 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(configureProviderCommand);
   console.log('Registered command: git-ai-assistant.configureProvider');
 
-  // Register the command for opening AWS credentials configuration panel
-  const configureAWSCommand = vscode.commands.registerCommand('git-ai-assistant.configureAWS', () => {
-    console.log('Configure AWS command triggered');
-    
-    // Show a confirmation to verify the command is being called
-    vscode.window.showInformationMessage('Opening AWS credentials configuration...', 'OK');
-    
-    try {
-      if (awsCredentialsPanel) {
-        // If we already have a panel, show it
-        console.log('Reusing existing panel');
-        awsCredentialsPanel.reveal(vscode.ViewColumn.One);
-      } else {
-        // Otherwise, create a new panel
-        console.log('Creating new panel');
-        awsCredentialsPanel = vscode.window.createWebviewPanel(
-          'awsCredentials',
-          'Configure AWS Credentials',
-          vscode.ViewColumn.One,
-          {
-            enableScripts: true,
-            retainContextWhenHidden: true
-          }
-        );
-
-        // Get current credentials from settings
-        const config = vscode.workspace.getConfiguration('gitAIAssistant');
-        const accessKeyId = config.get<string>('awsAccessKeyId') || '';
-        const secretAccessKey = config.get<string>('awsSecretAccessKey') || '';
-        const region = config.get<string>('awsRegion') || 'us-east-1';
-        const sessionToken = config.get<string>('awsSessionToken') || '';
-
-        console.log('Setting webview HTML content');
-        // Set webview HTML content
-        awsCredentialsPanel.webview.html = getAWSCredentialsWebviewContent(accessKeyId, secretAccessKey, region, sessionToken);
-
-        // Handle messages from the webview
-        awsCredentialsPanel.webview.onDidReceiveMessage(
-          async (message) => {
-            console.log('Received message from webview:', message.command);
-            switch (message.command) {
-              case 'saveCredentials':
-                try {
-                  // Update configuration with new values
-                  await config.update('awsAccessKeyId', message.accessKeyId, vscode.ConfigurationTarget.Global);
-                  await config.update('awsSecretAccessKey', message.secretAccessKey, vscode.ConfigurationTarget.Global);
-                  await config.update('awsRegion', message.region, vscode.ConfigurationTarget.Global);
-                  await config.update('awsSessionToken', message.sessionToken, vscode.ConfigurationTarget.Global);
-                  
-                  // Set AWS as the model provider
-                  await config.update('modelProvider', 'aws-bedrock', vscode.ConfigurationTarget.Global);
-                  
-                  vscode.window.showInformationMessage('AWS credentials saved successfully! AWS Bedrock is now your model provider.');
-                  
-                  // Refresh the sidebar to reflect the new provider
-                  treeDataProvider.refresh();
-                } catch (error) {
-                  vscode.window.showErrorMessage(`Failed to save AWS credentials: ${(error as Error).message}`);
-                }
-                break;
-            }
-          },
-          undefined,
-          context.subscriptions
-        );
-
-        // Reset when the panel is closed
-        awsCredentialsPanel.onDidDispose(
-          () => {
-            console.log('Panel disposed');
-            awsCredentialsPanel = undefined;
-          },
-          null,
-          context.subscriptions
-        );
-      }
-    } catch (error) {
-      console.error('Error in configureAWS command:', error);
-      vscode.window.showErrorMessage(`Error configuring AWS: ${(error as Error).message}`);
-    }
-  });
-  context.subscriptions.push(configureAWSCommand);
-  console.log('Registered command: git-ai-assistant.configureAWS');
-
-  // Register the command for opening Google credentials configuration panel
-  const configureGoogleCommand = vscode.commands.registerCommand('git-ai-assistant.configureGoogle', () => {
-    console.log('Configure Google command triggered');
-    
-    // Show a confirmation to verify the command is being called
-    vscode.window.showInformationMessage('Opening Google credentials configuration...', 'OK');
-    
-    try {
-      if (googleCredentialsPanel) {
-        // If we already have a panel, show it
-        console.log('Reusing existing panel');
-        googleCredentialsPanel.reveal(vscode.ViewColumn.One);
-      } else {
-        // Otherwise, create a new panel
-        console.log('Creating new panel');
-        googleCredentialsPanel = vscode.window.createWebviewPanel(
-          'googleCredentials',
-          'Configure Google Credentials',
-          vscode.ViewColumn.One,
-          {
-            enableScripts: true,
-            retainContextWhenHidden: true
-          }
-        );
-
-        // Get current credentials from settings
-        const config = vscode.workspace.getConfiguration('gitAIAssistant');
-        const apiKey = config.get<string>('googleApiKey') || '';
-        const modelId = config.get<string>('googleGeminiModel') || 'gemini-1.5-flash';
-
-        console.log('Setting webview HTML content');
-        // Set webview HTML content
-        googleCredentialsPanel.webview.html = getGoogleCredentialsWebviewContent(apiKey, modelId);
-
-        // Handle messages from the webview
-        googleCredentialsPanel.webview.onDidReceiveMessage(
-          async (message) => {
-            console.log('Received message from webview:', message.command);
-            switch (message.command) {
-              case 'saveCredentials':
-                try {
-                  // Update configuration with new values
-                  await config.update('googleApiKey', message.apiKey, vscode.ConfigurationTarget.Global);
-                  await config.update('googleGeminiModel', message.modelId, vscode.ConfigurationTarget.Global);
-                  
-                  // Set Google as the model provider
-                  await config.update('modelProvider', 'google-gemini', vscode.ConfigurationTarget.Global);
-                  
-                  vscode.window.showInformationMessage('Google credentials saved successfully! Google Gemini is now your model provider.');
-                  
-                  // Refresh the sidebar to reflect the new provider
-                  treeDataProvider.refresh();
-                } catch (error) {
-                  vscode.window.showErrorMessage(`Failed to save Google credentials: ${(error as Error).message}`);
-                }
-                break;
-            }
-          },
-          undefined,
-          context.subscriptions
-        );
-
-        // Reset when the panel is closed
-        googleCredentialsPanel.onDidDispose(
-          () => {
-            console.log('Panel disposed');
-            googleCredentialsPanel = undefined;
-          },
-          null,
-          context.subscriptions
-        );
-      }
-    } catch (error) {
-      console.error('Error in configureGoogle command:', error);
-      vscode.window.showErrorMessage(`Error configuring Google: ${(error as Error).message}`);
-    }
-  });
-  context.subscriptions.push(configureGoogleCommand);
-  console.log('Registered command: git-ai-assistant.configureGoogle');
-
   // Register the command for generating PR descriptions
   const generatePRCommand = vscode.commands.registerCommand('git-ai-assistant.generatePRDescription', async () => {
     console.log('Generate PR Description command triggered');
@@ -412,56 +224,46 @@ export function activate(context: vscode.ExtensionContext) {
         cancellable: false
       }, async (progress) => {
         try {
-          progress.report({ message: 'Calling AI service...' });
-          
+          progress.report({ message: 'Calling GitHub Copilot...' });
+
           // Get configuration
           const config = vscode.workspace.getConfiguration('gitAIAssistant');
-          const modelProvider = config.get<string>('modelProvider') || 'google-gemini';
-          console.log('Using model provider:', modelProvider);
-          
-          // Create the appropriate AI service based on the provider
-          let aiService;
-          
-          if (modelProvider === 'aws-bedrock') {
-            // Get AWS credentials from settings
-            const accessKeyId = config.get<string>('awsAccessKeyId') || '';
-            const secretAccessKey = config.get<string>('awsSecretAccessKey') || '';
-            const region = config.get<string>('awsRegion') || 'us-east-1';
-            const sessionToken = config.get<string>('awsSessionToken') || '';
-            
-            if (!accessKeyId || !secretAccessKey) {
-              vscode.window.showErrorMessage('AWS credentials not configured. Please use the Configure AWS Credentials command first.');
-              return Promise.resolve();
-            }
-            
-            // Create AWS Bedrock service
-            console.log('Creating AWS Bedrock service...');
-            aiService = AIServiceFactory.createService('aws-bedrock', {
-              region,
-              accessKeyId,
-              secretAccessKey,
-              sessionToken
+          const selectedModelId = config.get<string>('copilotModelId');
+
+          // Check if a model is selected
+          if (!selectedModelId) {
+            vscode.window.showErrorMessage(
+              'No Copilot model selected. Please configure a model in the extension settings.',
+              'Configure'
+            ).then(selection => {
+              if (selection === 'Configure') {
+                vscode.commands.executeCommand('git-ai-assistant.configureProvider');
+              }
             });
-          } else if (modelProvider === 'google-gemini') {
-            // Get Google credentials from settings
-            const apiKey = config.get<string>('googleApiKey') || '';
-            const modelId = config.get<string>('googleGeminiModel') || 'gemini-1.5-flash';
-            
-            if (!apiKey) {
-              vscode.window.showErrorMessage('Google API key not configured. Please use the Configure Google Credentials command first.');
-              return Promise.resolve();
-            }
-            
-            // Create Google Gemini service
-            aiService = AIServiceFactory.createService('google-gemini', {
-              apiKey,
-              modelId
-            });
-          } else {
-            vscode.window.showErrorMessage(`Unknown model provider: ${modelProvider}`);
             return Promise.resolve();
           }
-          
+
+          console.log('Using Copilot model:', selectedModelId);
+
+          // Get the Copilot model
+          const model = await CopilotAIService.getModelById(selectedModelId);
+
+          if (!model) {
+            vscode.window.showErrorMessage(
+              'Selected Copilot model not available. Please ensure you have an active GitHub Copilot subscription and select a valid model.',
+              'Configure'
+            ).then(selection => {
+              if (selection === 'Configure') {
+                vscode.commands.executeCommand('git-ai-assistant.configureProvider');
+              }
+            });
+            return Promise.resolve();
+          }
+
+          // Create Copilot AI service
+          console.log('Creating Copilot AI service...');
+          const aiService = new CopilotAIService(model);
+
           // Use AI service to generate description
           const description = await aiService.generatePRDescription(diff, template);
           
@@ -515,30 +317,42 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
     return element;
   }
 
-  getChildren(element?: TreeItem): Thenable<TreeItem[]> {
+  async getChildren(element?: TreeItem): Promise<TreeItem[]> {
     if (element) {
       return Promise.resolve([]);
     }
-    
-    // Get the current model provider configuration
+
+    // Get the current configuration
     const config = vscode.workspace.getConfiguration('gitAIAssistant');
-    const provider = config.get<string>('modelProvider', 'google-gemini');
+    const copilotModelId = config.get<string>('copilotModelId', '');
     const templateSource = config.get<string>('templateSource', 'default');
-    
-    // Format the provider name for display
-    let providerDisplay = 'Google Gemini';
-    
+
+    // Get model display name
+    let modelDisplay = 'No model selected';
+    if (copilotModelId) {
+      try {
+        const model = await CopilotAIService.getModelById(copilotModelId);
+        if (model) {
+          modelDisplay = model.name;
+        } else {
+          modelDisplay = 'Model not found';
+        }
+      } catch (error) {
+        modelDisplay = 'Error loading model';
+      }
+    }
+
     // Format the template source for display
     let templateDisplay = 'Default';
     if (templateSource === 'custom') {
       templateDisplay = 'Custom';
     }
-    
+
     // Create the root elements
     return Promise.resolve([
       new TreeItem(
         'Generate PR Description',
-        'Click to generate a PR description using AI',
+        'Click to generate a PR description using GitHub Copilot',
         vscode.TreeItemCollapsibleState.None,
         {
           command: 'git-ai-assistant.generatePRDescription',
@@ -548,8 +362,8 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
         'git-pull-request'
       ),
       new TreeItem(
-        `Configure Settings (Provider: ${providerDisplay}, Template: ${templateDisplay})`,
-        'Configure AI provider and template settings',
+        `Configure Settings (Model: ${modelDisplay}, Template: ${templateDisplay})`,
+        'Configure Copilot model and template settings',
         vscode.TreeItemCollapsibleState.None,
         {
           command: 'git-ai-assistant.configureProvider',
@@ -587,267 +401,51 @@ class TreeItem extends vscode.TreeItem {
 }
 
 /**
- * Get the HTML content for the AWS credentials webview
- */
-function getAWSCredentialsWebviewContent(
-  accessKeyId: string, 
-  secretAccessKey: string, 
-  region: string,
-  sessionToken: string = ''
-): string {
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configure AWS Credentials</title>
-    <style>
-      body {
-        padding: 16px;
-        font-family: var(--vscode-font-family);
-        color: var(--vscode-foreground);
-      }
-      .container {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      label {
-        display: block;
-        margin-bottom: 4px;
-      }
-      input, select {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        background-color: var(--vscode-input-background);
-        color: var(--vscode-input-foreground);
-        border: 1px solid var(--vscode-input-border);
-      }
-      button {
-        padding: 8px 16px;
-        background-color: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border: none;
-        cursor: pointer;
-      }
-      button:hover {
-        background-color: var(--vscode-button-hoverBackground);
-      }
-      .field {
-        margin-bottom: 16px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Configure AWS Credentials</h1>
-      <p>Enter your AWS credentials to use with Bedrock for AI-generated PR descriptions.</p>
-      
-      <div class="field">
-        <label for="accessKeyId">AWS Access Key ID</label>
-        <input type="text" id="accessKeyId" value="${accessKeyId}" placeholder="Enter your AWS Access Key ID" />
-      </div>
-      
-      <div class="field">
-        <label for="secretAccessKey">AWS Secret Access Key</label>
-        <input type="password" id="secretAccessKey" value="${secretAccessKey}" placeholder="Enter your AWS Secret Access Key" />
-      </div>
-      
-      <div class="field">
-        <label for="region">AWS Region</label>
-        <select id="region">
-          <option value="us-east-1" ${region === 'us-east-1' ? 'selected' : ''}>US East (N. Virginia) - us-east-1</option>
-          <option value="us-east-2" ${region === 'us-east-2' ? 'selected' : ''}>US East (Ohio) - us-east-2</option>
-          <option value="us-west-1" ${region === 'us-west-1' ? 'selected' : ''}>US West (N. California) - us-west-1</option>
-          <option value="us-west-2" ${region === 'us-west-2' ? 'selected' : ''}>US West (Oregon) - us-west-2</option>
-          <option value="eu-west-1" ${region === 'eu-west-1' ? 'selected' : ''}>EU (Ireland) - eu-west-1</option>
-          <option value="eu-central-1" ${region === 'eu-central-1' ? 'selected' : ''}>EU (Frankfurt) - eu-central-1</option>
-          <option value="ap-northeast-1" ${region === 'ap-northeast-1' ? 'selected' : ''}>Asia Pacific (Tokyo) - ap-northeast-1</option>
-          <option value="ap-northeast-2" ${region === 'ap-northeast-2' ? 'selected' : ''}>Asia Pacific (Seoul) - ap-northeast-2</option>
-          <option value="ap-southeast-1" ${region === 'ap-southeast-1' ? 'selected' : ''}>Asia Pacific (Singapore) - ap-southeast-1</option>
-          <option value="ap-southeast-2" ${region === 'ap-southeast-2' ? 'selected' : ''}>Asia Pacific (Sydney) - ap-southeast-2</option>
-        </select>
-      </div>
-      
-      <div class="field">
-        <label for="sessionToken">AWS Session Token (optional)</label>
-        <input type="password" id="sessionToken" value="${sessionToken}" placeholder="Enter your AWS Session Token if using temporary credentials" />
-      </div>
-      
-      <button id="saveButton">Save Credentials & Use AWS Bedrock</button>
-    </div>
-    
-    <script>
-      const vscode = acquireVsCodeApi();
-      
-      document.getElementById('saveButton').addEventListener('click', () => {
-        const accessKeyId = document.getElementById('accessKeyId').value;
-        const secretAccessKey = document.getElementById('secretAccessKey').value;
-        const region = document.getElementById('region').value;
-        const sessionToken = document.getElementById('sessionToken').value;
-        
-        vscode.postMessage({
-          command: 'saveCredentials',
-          accessKeyId,
-          secretAccessKey,
-          region,
-          sessionToken
-        });
-      });
-    </script>
-  </body>
-  </html>`;
-}
-
-/**
- * Get the HTML content for the Google credentials webview
- */
-function getGoogleCredentialsWebviewContent(apiKey: string, modelId: string): string {
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configure Google Credentials</title>
-    <style>
-      body {
-        padding: 16px;
-        font-family: var(--vscode-font-family);
-        color: var(--vscode-foreground);
-      }
-      .container {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      label {
-        display: block;
-        margin-bottom: 4px;
-      }
-      input, select {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        background-color: var(--vscode-input-background);
-        color: var(--vscode-input-foreground);
-        border: 1px solid var(--vscode-input-border);
-      }
-      button {
-        padding: 8px 16px;
-        background-color: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border: none;
-        cursor: pointer;
-      }
-      button:hover {
-        background-color: var(--vscode-button-hoverBackground);
-      }
-      .field {
-        margin-bottom: 16px;
-      }
-      .help-text {
-        margin-top: 8px;
-        font-size: 0.9em;
-        color: var(--vscode-descriptionForeground);
-      }
-      .api-key-link {
-        color: var(--vscode-textLink-foreground);
-        text-decoration: underline;
-      }
-      .api-key-link:hover {
-        color: var(--vscode-textLink-activeForeground);
-      }
-      .note {
-        font-style: italic;
-        margin-top: 4px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Configure Google Credentials</h1>
-      <p>Enter your Google API key to use with Gemini for AI-generated PR descriptions.</p>
-      
-      <div class="field">
-        <label for="apiKey">Google API Key</label>
-        <input type="password" id="apiKey" value="${apiKey}" placeholder="Enter your Google API Key" />
-        <div class="help-text">
-          <p>Need an API key? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-key-link">Generate Gemini API Key</a></p>
-          <p class="note">Note: You'll need to sign in to your Google account to generate the API key.</p>
-        </div>
-      </div>
-      
-      <div class="field">
-        <label for="modelId">Gemini Model</label>
-        <select id="modelId">
-          <option value="gemini-1.5-flash" ${modelId === 'gemini-1.5-flash' ? 'selected' : ''}>Gemini 1.5 Flash</option>
-          <option value="gemini-1.5-flash-8b" ${modelId === 'gemini-1.5-flash-8b' ? 'selected' : ''}>Gemini 1.5 Flash 8B</option>
-          <option value="gemini-2.0-flash-exp" ${modelId === 'gemini-2.0-flash-exp' ? 'selected' : ''}>Gemini 2.0 Flash (Experimental)</option>
-        </select>
-      </div>
-      
-      <button id="saveButton">Save Credentials & Use Google Gemini</button>
-    </div>
-    
-    <script>
-      const vscode = acquireVsCodeApi();
-      
-      document.getElementById('saveButton').addEventListener('click', () => {
-        const apiKey = document.getElementById('apiKey').value;
-        const modelId = document.getElementById('modelId').value;
-        
-        vscode.postMessage({
-          command: 'saveCredentials',
-          apiKey,
-          modelId
-        });
-      });
-    </script>
-  </body>
-  </html>`;
-}
-
-/**
  * Get the HTML content for the unified AI provider configuration webview
  */
-function getProviderConfigWebviewContent(
-  currentProvider: string,
-  awsAccessKeyId: string,
-  awsSecretAccessKey: string,
-  awsRegion: string,
-  awsSessionToken: string,
-  googleApiKey: string,
-  googleModel: string,
+async function getProviderConfigWebviewContent(
+  selectedModelId: string,
   templateSource: string,
   customTemplate: string,
   defaultTemplate: string
-): string {
+): Promise<string> {
   // Get current configuration
   const config = vscode.workspace.getConfiguration('gitAIAssistant');
   const diffSource = config.get<string>('diffSource', 'staged');
   const commitCount = config.get<number>('commitCount', 1);
-  
+
+  // Get available Copilot models
+  let modelsDropdownOptions = '';
+  try {
+    const models = await CopilotAIService.listAvailableModels();
+
+    if (models.length === 0) {
+      modelsDropdownOptions = '<option value="">No Copilot models available</option>';
+    } else {
+      modelsDropdownOptions = models.map(model =>
+        `<option value="${model.id}" ${selectedModelId === model.id ? 'selected' : ''}>${model.name} (${model.family})</option>`
+      ).join('\n');
+    }
+  } catch (error) {
+    console.error('Error loading Copilot models:', error);
+    modelsDropdownOptions = '<option value="">Error loading models</option>';
+  }
+
   return `
   <!DOCTYPE html>
   <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Provider Configuration</title>
+    <title>Git AI Assistant Configuration</title>
     <style>
         body {
             font-family: var(--vscode-font-family);
             padding: 20px;
             color: var(--vscode-foreground);
         }
-        .provider-selector {
-            margin-bottom: 20px;
-        }
         .config-section {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
             padding: 15px;
             border: 1px solid var(--vscode-panel-border);
             border-radius: 5px;
@@ -885,11 +483,6 @@ function getProviderConfigWebviewContent(
             border-top: 1px solid var(--vscode-panel-border);
             padding-top: 20px;
         }
-        .diff-source-section {
-            margin-top: 30px;
-            border-top: 1px solid var(--vscode-panel-border);
-            padding-top: 20px;
-        }
         button {
             padding: 8px 16px;
             background-color: var(--vscode-button-background);
@@ -917,66 +510,33 @@ function getProviderConfigWebviewContent(
             font-size: 0.9em;
             color: var(--vscode-descriptionForeground);
         }
-        .api-key-link {
-            color: var(--vscode-textLink-foreground);
-            text-decoration: underline;
-        }
-        .api-key-link:hover {
-            color: var(--vscode-textLink-activeForeground);
-        }
-        .note {
-            font-style: italic;
-            margin-top: 4px;
+        .info-banner {
+            background-color: var(--vscode-inputValidation-infoBackground);
+            border: 1px solid var(--vscode-inputValidation-infoBorder);
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
-    <h1>AI Provider Configuration</h1>
-    
-    <div class="provider-selector">
-        <label for="provider-select">Select AI Provider:</label>
-        <select id="provider-select">
-            <option value="google-gemini" ${currentProvider === 'google-gemini' ? 'selected' : ''}>Google Gemini</option>
-            <option value="aws-bedrock" ${currentProvider === 'aws-bedrock' ? 'selected' : ''}>AWS Bedrock</option>
-        </select>
+    <h1>Git AI Assistant Configuration</h1>
+
+    <div class="info-banner">
+        <strong>GitHub Copilot Required:</strong> This extension uses VS Code's built-in GitHub Copilot integration.
+        Please ensure you have an active Copilot subscription.
     </div>
-    
-    <div id="aws-config" class="config-section" style="display: ${currentProvider === 'aws-bedrock' ? 'block' : 'none'}">
-        <h2>AWS Bedrock Configuration</h2>
+
+    <div class="config-section">
+        <h2>Copilot Model Selection</h2>
         <div class="field">
-            <label for="aws-access-key">Access Key ID:</label>
-            <input type="password" id="aws-access-key" value="${awsAccessKeyId}" placeholder="Enter AWS Access Key ID">
-        </div>
-        <div class="field">
-            <label for="aws-secret-key">Secret Access Key:</label>
-            <input type="password" id="aws-secret-key" value="${awsSecretAccessKey}" placeholder="Enter AWS Secret Access Key">
-        </div>
-        <div class="field">
-            <label for="aws-region">Region:</label>
-            <input type="text" id="aws-region" value="${awsRegion}" placeholder="Enter AWS Region (e.g., us-west-2)">
-        </div>
-        <div class="field">
-            <label for="aws-session-token">Session Token (optional):</label>
-            <input type="password" id="aws-session-token" value="${awsSessionToken}" placeholder="Enter AWS Session Token if using temporary credentials">
-        </div>
-    </div>
-    
-    <div id="google-config" class="config-section" style="display: ${currentProvider === 'google-gemini' ? 'block' : 'none'}">
-        <h2>Google Gemini Configuration</h2>
-        <div class="field">
-            <label for="google-api-key">API Key:</label>
-            <input type="password" id="google-api-key" value="${googleApiKey}" placeholder="Enter Google API Key">
-            <div class="help-text">
-              <p>Need an API key? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="api-key-link">Generate Gemini API Key</a></p>
-              <p class="note">Note: You'll need to sign in to your Google account to generate the API key.</p>
-            </div>
-        </div>
-        <div class="field">
-            <label for="google-model">Model:</label>
-            <select id="google-model">
-                <option value="gemini-pro" ${googleModel === 'gemini-pro' ? 'selected' : ''}>gemini-pro</option>
-                <option value="gemini-pro-vision" ${googleModel === 'gemini-pro-vision' ? 'selected' : ''}>gemini-pro-vision</option>
+            <label for="copilot-model-select">Select Copilot Model:</label>
+            <select id="copilot-model-select">
+                ${modelsDropdownOptions}
             </select>
+            <div class="help-text">
+                Select which GitHub Copilot model to use for generating PR descriptions.
+            </div>
         </div>
     </div>
     
@@ -1030,43 +590,32 @@ function getProviderConfigWebviewContent(
     <script>
         (function() {
             const vscode = acquireVsCodeApi();
-            
-            // Handle provider selection change
-            const providerSelect = document.getElementById('provider-select');
-            const awsConfig = document.getElementById('aws-config');
-            const googleConfig = document.getElementById('google-config');
-            
-            providerSelect.addEventListener('change', function() {
-                const provider = providerSelect.value;
-                awsConfig.style.display = provider === 'aws-bedrock' ? 'block' : 'none';
-                googleConfig.style.display = provider === 'google-gemini' ? 'block' : 'none';
-            });
-            
+
             // Handle template source selection
             const templateSourceSelect = document.getElementById('template-source');
             const customTemplateSection = document.getElementById('custom-template-section');
-            
+
             templateSourceSelect.addEventListener('change', function() {
                 const source = templateSourceSelect.value;
                 customTemplateSection.style.display = source === 'custom' ? 'block' : 'none';
             });
-            
+
             // Handle diff source selection
             const diffSourceRadios = document.getElementsByName('diff-source');
             const commitCountField = document.getElementById('commit-count-field');
-            
+
             for (const radio of diffSourceRadios) {
                 radio.addEventListener('change', function() {
                     const source = this.value;
                     commitCountField.style.display = source === 'commits' ? 'block' : 'none';
                 });
             }
-            
+
             // Handle save configuration button
             document.getElementById('save-config').addEventListener('click', function() {
-                const provider = providerSelect.value;
+                const copilotModelId = document.getElementById('copilot-model-select').value;
                 const templateSource = templateSourceSelect.value;
-                
+
                 // Get selected diff source
                 let diffSource = 'staged';
                 for (const radio of diffSourceRadios) {
@@ -1075,31 +624,21 @@ function getProviderConfigWebviewContent(
                         break;
                     }
                 }
-                
+
                 // Get commit count
                 const commitCount = parseInt(document.getElementById('commit-count').value, 10) || 1;
-                
-                let config = {
+
+                const config = {
                     command: 'saveConfiguration',
-                    provider: provider,
+                    copilotModelId: copilotModelId,
                     templateSource: templateSource,
                     diffSource: diffSource,
                     commitCount: commitCount
                 };
-                
-                if (provider === 'aws-bedrock') {
-                    config.awsAccessKeyId = document.getElementById('aws-access-key').value;
-                    config.awsSecretAccessKey = document.getElementById('aws-secret-key').value;
-                    config.awsRegion = document.getElementById('aws-region').value;
-                    config.awsSessionToken = document.getElementById('aws-session-token').value;
-                } else if (provider === 'google-gemini') {
-                    config.googleApiKey = document.getElementById('google-api-key').value;
-                    config.googleModel = document.getElementById('google-model').value;
-                }
-                
+
                 vscode.postMessage(config);
             });
-            
+
             // Handle custom template actions
             document.getElementById('save-custom-template').addEventListener('click', function() {
                 const template = document.getElementById('custom-template-content').value;
@@ -1108,7 +647,7 @@ function getProviderConfigWebviewContent(
                     template: template
                 });
             });
-            
+
             document.getElementById('delete-custom-template').addEventListener('click', function() {
                 vscode.postMessage({
                     command: 'deleteCustomTemplate'
@@ -1124,35 +663,19 @@ function getProviderConfigWebviewContent(
 /**
  * Function to update the provider config panel with current settings
  */
-function updateProviderConfigPanel() {
+async function updateProviderConfigPanel() {
   if (!providerConfigPanel) {
     return;
   }
 
   const config = vscode.workspace.getConfiguration('gitAIAssistant');
-  const currentProvider = config.get<string>('modelProvider', 'google-gemini');
+  const copilotModelId = config.get<string>('copilotModelId', '');
   const templateSource = config.get<string>('templateSource', 'repository');
   const defaultTemplate = config.get<string>('defaultTemplate', '');
   const customTemplate = templateManager.getCustomTemplate() || '';
-  const diffSource = config.get<string>('diffSource', 'staged');
-  const commitCount = config.get<number>('commitCount', 1);
 
-  const awsAccessKeyId = config.get<string>('awsAccessKeyId', '');
-  const awsSecretAccessKey = config.get<string>('awsSecretAccessKey', '');
-  const awsRegion = config.get<string>('awsRegion', 'us-east-1');
-  const awsSessionToken = config.get<string>('awsSessionToken', '');
-  
-  const googleApiKey = config.get<string>('googleApiKey', '');
-  const googleModel = config.get<string>('googleGeminiModel', 'gemini-pro');
-
-  providerConfigPanel.webview.html = getProviderConfigWebviewContent(
-    currentProvider,
-    awsAccessKeyId,
-    awsSecretAccessKey,
-    awsRegion,
-    awsSessionToken,
-    googleApiKey,
-    googleModel,
+  providerConfigPanel.webview.html = await getProviderConfigWebviewContent(
+    copilotModelId,
     templateSource,
     customTemplate,
     defaultTemplate
@@ -1160,15 +683,37 @@ function updateProviderConfigPanel() {
 }
 
 /**
+ * Check if GitHub Copilot is available
+ * Show error message if not available
+ */
+async function checkCopilotAvailability() {
+  try {
+    const isAvailable = await CopilotAIService.isCopilotAvailable();
+
+    if (!isAvailable) {
+      vscode.window.showErrorMessage(
+        'GitHub Copilot is required to use Git AI Assistant. Please ensure you have an active GitHub Copilot subscription and that Copilot is enabled in VS Code.',
+        'Learn More'
+      ).then(selection => {
+        if (selection === 'Learn More') {
+          vscode.env.openExternal(vscode.Uri.parse('https://github.com/features/copilot'));
+        }
+      });
+    } else {
+      console.log('GitHub Copilot is available');
+    }
+  } catch (error) {
+    console.error('Error checking Copilot availability:', error);
+    vscode.window.showWarningMessage(
+      'Unable to verify GitHub Copilot availability. Some features may not work correctly.'
+    );
+  }
+}
+
+/**
  * This method is called when the extension is deactivated
  */
 export function deactivate() {
-  if (awsCredentialsPanel) {
-    awsCredentialsPanel.dispose();
-  }
-  if (googleCredentialsPanel) {
-    googleCredentialsPanel.dispose();
-  }
   if (providerConfigPanel) {
     providerConfigPanel.dispose();
   }

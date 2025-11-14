@@ -1,32 +1,30 @@
 # Git AI Assistant
 
-A VS Code extension that generates PR descriptions and commit messages using AI (AWS Bedrock Claude or Google Gemini).
+A VS Code extension that generates PR descriptions using GitHub Copilot. No API keys required - just use your existing Copilot subscription!
 
    ![Git-Ai-Assistant](resources/final-view.gif)
 ## Features
 
 - Automatically generates PR descriptions based on your local git diffs
-- Supports multiple AI providers:
-  - AWS Bedrock with Claude models
-  - Google Gemini models
+- Uses GitHub Copilot models directly through VS Code
+- No API key management required
 - Supports customizable PR templates
 - Opens the generated PR description in a new editor tab so you can review and edit it
 - Convenient sidebar panel for quick access to all features
-- Easy configuration UI for AI provider credentials
-- Modular architecture for easy addition of more AI providers in the future
+- Choose from all available Copilot models
 
 ## Requirements
 
 - Visual Studio Code 1.60.0 or higher
 - Git installed and accessible from the command line
-- One of the following:
-  - AWS account with access to Bedrock and Claude
-  - Google API key with access to Gemini models
+- **Active GitHub Copilot subscription** (required)
+- GitHub Copilot extension enabled in VS Code
 
 ## Installation
 
 1. Install the extension from the VS Code Marketplace
-2. Configure your preferred AI provider credentials through the sidebar panel
+2. Ensure you have an active GitHub Copilot subscription
+3. Select your preferred Copilot model through the configuration panel
 
 ## Usage
 
@@ -34,47 +32,38 @@ A VS Code extension that generates PR descriptions and commit messages using AI 
 
 1. Click on the Git AI Assistant icon in the VS Code Activity Bar (left sidebar)
 2. In the sidebar panel, click on:
-   - "Configure AWS Credentials" to set up your AWS access
-   - "Configure Google Credentials" to set up your Google API key
-   - "Generate PR Description" to create a PR description
+   - "Configure Settings" to select your Copilot model and configure other options
+   - "Generate PR Description" to create a PR description from your changes
 
 ### Using Commands
 
 1. Make changes to your code and stage them with git
 2. Open the command palette (Ctrl+Shift+P or Cmd+Shift+P)
-3. Run the command "Generate PR Description and Commit Message"
+3. Run the command "Generate PR Description"
 4. Review and edit the generated description in the new editor tab
 5. Copy the description to your PR when ready
 
 ## Configuration
 
-This extension supports multiple AI providers that you can configure:
+### Selecting a Copilot Model
 
-### Google Gemini
+1. Click on "Configure Settings" in the sidebar panel
+2. Select your preferred GitHub Copilot model from the dropdown
+3. The dropdown will show all available Copilot models in your VS Code instance
+4. Click "Save Configuration"
 
-#### Using the Configuration UI
-1.  Get an API key for Gemini here: https://aistudio.google.com/apikey
-2. Click on "Configure Google Credentials" in the sidebar panel
-3. Enter your Google API Key
+   ![Configuration](resources/aprovider-generate.gif)
 
-4. Select your preferred Gemini model:
-   - Gemini 1.5 Flash (default)
-   - Gemini 1.5 Flash 8B (smaller model)
-   - Gemini 2.0 Flash (experimental)
-5. Click "Save Credentials & Use Google Gemini"
-
-   ![API Key Configuration](resources/aprovider-generate.gif)
-
-#### Using Settings
+### Settings
 
 You can also configure these settings in VS Code settings:
 
 ```json
 {
-  "gitAIAssistant.modelProvider": "google-gemini",
-  "gitAIAssistant.googleApiKey": "YOUR_GOOGLE_API_KEY",
-  "gitAIAssistant.googleGeminiModel": "gemini-1.5-flash",
-  "gitAIAssistant.defaultPRTemplate": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n"
+  "gitAIAssistant.copilotModelId": "copilot-model-id-here",
+  "gitAIAssistant.diffSource": "staged",
+  "gitAIAssistant.commitCount": 1,
+  "gitAIAssistant.templateSource": "default"
 }
 ```
 

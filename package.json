@@ -1,8 +1,8 @@
 {
   "name": "git-ai-assistant",
   "displayName": "Git AI Assistant",
-  "description": "A VS Code extension that generates PR descriptions and commit messages using AI",
-  "version": "0.3.0",
+  "description": "A VS Code extension that generates PR descriptions using GitHub Copilot (Copilot subscription required)",
+  "version": "0.4.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -42,19 +42,11 @@
     "commands": [
       {
         "command": "git-ai-assistant.generatePRDescription",
-        "title": "Generate PR Description and Commit Message"
+        "title": "Generate PR Description"
       },
       {
         "command": "git-ai-assistant.configureProvider",
         "title": "Configure Settings"
-      },
-      {
-        "command": "git-ai-assistant.configureAWS",
-        "title": "Configure AWS Credentials"
-      },
-      {
-        "command": "git-ai-assistant.configureGoogle",
-        "title": "Configure Google Credentials"
       },
       {
         "command": "git-ai-assistant.testCommand",
@@ -79,14 +71,6 @@
           "when": "true"
         },
         {
-          "command": "git-ai-assistant.configureAWS",
-          "when": "false"
-        },
-        {
-          "command": "git-ai-assistant.configureGoogle",
-          "when": "false"
-        },
-        {
           "command": "git-ai-assistant.testCommand",
           "when": "true"
         }
@@ -95,11 +79,10 @@
     "configuration": {
       "title": "Git AI Assistant",
       "properties": {
-        "gitAIAssistant.modelProvider": {
+        "gitAIAssistant.copilotModelId": {
           "type": "string",
-          "enum": ["aws-bedrock", "google-gemini"],
-          "default": "google-gemini",
-          "description": "The AI model provider to use for generating PR descriptions"
+          "default": "",
+          "description": "Selected GitHub Copilot model ID for generating PR descriptions"
         },
         "gitAIAssistant.useRepoTemplate": {
           "type": "boolean",
@@ -111,37 +94,6 @@
           "enum": ["custom", "default"],
           "default": "default",
           "description": "Source for PR template: custom (stored in extension) or default (built-in template)"
-        },
-        "gitAIAssistant.awsAccessKeyId": {
-          "type": "string",
-          "default": "",
-          "description": "AWS Access Key ID for Bedrock API"
-        },
-        "gitAIAssistant.awsSecretAccessKey": {
-          "type": "string",
-          "default": "",
-          "description": "AWS Secret Access Key for Bedrock API"
-        },
-        "gitAIAssistant.awsRegion": {
-          "type": "string",
-          "default": "us-east-1",
-          "description": "AWS Region for Bedrock API"
-        },
-        "gitAIAssistant.awsSessionToken": {
-          "type": "string",
-          "default": "",
-          "description": "AWS Session Token for temporary credentials (optional)"
-        },
-        "gitAIAssistant.googleApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Google API Key for Gemini models"
-        },
-        "gitAIAssistant.googleGeminiModel": {
-          "type": "string",
-          "enum": ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-flash-8b"],
-          "default": "gemini-1.5-flash",
-          "description": "Google Gemini model to use"
         },
         "gitAIAssistant.defaultPRTemplate": {
           "type": "string",
@@ -212,11 +164,6 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^2.2.0",
-    "@ai-sdk/google": "^1.2.0",
-    "@ai-sdk/provider-utils": "^2.2.0",
-    "ai": "^4.2.0",
-    "aws-sdk": "^2.1692.0"
   },
   "publisher": "gyaneshgouraw",
   "repository": {
