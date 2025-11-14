@@ -104,6 +104,13 @@ You can also configure these settings in VS Code settings:
 }
 ```
 
+## Developer Documentation
+
+For developers wanting to contribute or understand the codebase:
+
+- **[overview.md](./overview.md)** - VS Code extension development fundamentals and patterns
+- **[AGENTS.md](./AGENTS.md)** - Architecture guide and how to add new AI providers
+
 ## License
 
 MIT 

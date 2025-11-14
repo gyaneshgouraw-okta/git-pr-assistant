@@ -10,6 +10,12 @@
 
 ---
 
+## Prerequisites
+
+📖 **New to VS Code extension development?** Read [overview.md](./overview.md) first to understand the foundational concepts, patterns, and APIs used in VS Code extensions. This guide assumes familiarity with those concepts.
+
+---
+
 ## Overview
 
 Git AI Assistant is a VS Code extension that leverages AI to automatically generate Pull Request descriptions and commit messages. The extension is designed with a modular, extensible architecture that makes it easy to add new AI providers.
