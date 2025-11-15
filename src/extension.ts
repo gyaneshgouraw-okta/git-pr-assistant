@@ -35,9 +35,15 @@ export function activate(context: vscode.ExtensionContext) {
   // Ensure commands are registered globally
   vscode.commands.executeCommand('setContext', 'git-ai-assistant.enabled', true);
 
-  // Register the tree data provider for the sidebar
-  const treeDataProvider = new GitAIAssistantProvider();
-  vscode.window.registerTreeDataProvider('gitAIAssistantPanel', treeDataProvider);
+  // Register the Material Design webview provider for the main sidebar
+  const sidebarWebviewProvider = new GitAIAssistantWebviewProvider(context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('gitAIAssistantWebview', sidebarWebviewProvider, {
+      webviewOptions: {
+        retainContextWhenHidden: true
+      }
+    })
+  );
 
   // Register the SCM webview provider
   const scmWebviewProvider = new SCMWebviewProvider(context.extensionUri);
@@ -101,9 +107,6 @@ export function activate(context: vscode.ExtensionContext) {
                 console.log(`Saved settings - model: ${copilotModelId}, template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
 
                 vscode.window.showInformationMessage('Configuration saved successfully');
-
-                // Refresh tree view to show updated model
-                treeDataProvider.refresh();
                 break;
                 
               case 'saveCustomTemplate':
@@ -113,8 +116,7 @@ export function activate(context: vscode.ExtensionContext) {
                 await config.update('templateSource', 'custom', vscode.ConfigurationTarget.Global);
                 console.log('Saved custom template and set template source to custom');
                 vscode.window.showInformationMessage('Custom template saved successfully');
-                treeDataProvider.refresh();
-                
+
                 // Refresh webview to show template source change
                 if (providerConfigPanel) {
                   updateProviderConfigPanel();
@@ -1027,6 +1029,476 @@ class SCMWebviewProvider implements vscode.WebviewViewProvider {
                 <span style="color: var(--vscode-errorForeground);">Not configured</span>
             </div>
             `}
+        </div>
+
+        <script>
+            const vscode = acquireVsCodeApi();
+
+            document.getElementById('generateBtn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'generatePR' });
+            });
+
+            document.getElementById('configureBtn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'configure' });
+            });
+        </script>
+    </body>
+    </html>`;
+  }
+}
+
+/**
+ * Material Design webview view provider for the main sidebar
+ */
+class GitAIAssistantWebviewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly _extensionUri: vscode.Uri) {}
+
+  public async resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri]
+    };
+
+    webviewView.webview.html = await this.getHtmlContent(webviewView.webview);
+
+    // Handle messages from the webview
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      switch (message.command) {
+        case 'generatePR':
+          vscode.commands.executeCommand('git-ai-assistant.generatePRDescription');
+          break;
+        case 'configure':
+          vscode.commands.executeCommand('git-ai-assistant.configureProvider');
+          break;
+        case 'refresh':
+          webviewView.webview.html = await this.getHtmlContent(webviewView.webview);
+          break;
+      }
+    });
+
+    // Update content when configuration changes
+    vscode.workspace.onDidChangeConfiguration(async (e) => {
+      if (e.affectsConfiguration('gitAIAssistant')) {
+        webviewView.webview.html = await this.getHtmlContent(webviewView.webview);
+      }
+    });
+  }
+
+  private async getHtmlContent(webview: vscode.Webview): Promise<string> {
+    // Get current configuration
+    const config = vscode.workspace.getConfiguration('gitAIAssistant');
+    const copilotModelId = config.get<string>('copilotModelId', '');
+    const templateSource = config.get<string>('templateSource', 'default');
+    const diffSource = config.get<string>('diffSource', 'staged');
+    const commitCount = config.get<number>('commitCount', 1);
+
+    // Get model display name
+    let modelDisplay = 'Not configured';
+    let modelStatus = 'error';
+    if (copilotModelId) {
+      try {
+        const model = await CopilotAIService.getModelById(copilotModelId);
+        if (model) {
+          modelDisplay = model.name;
+          modelStatus = 'success';
+        }
+      } catch (error) {
+        modelDisplay = 'Error loading model';
+        modelStatus = 'warning';
+      }
+    }
+
+    // Check Copilot availability
+    let copilotStatus = 'Unknown';
+    let copilotStatusClass = 'warning';
+    try {
+      const isAvailable = await CopilotAIService.isCopilotAvailable();
+      if (isAvailable) {
+        copilotStatus = 'Ready';
+        copilotStatusClass = 'success';
+      } else {
+        copilotStatus = 'Not Available';
+        copilotStatusClass = 'error';
+      }
+    } catch (error) {
+      copilotStatus = 'Unknown';
+      copilotStatusClass = 'warning';
+    }
+
+    const templateDisplay = templateSource === 'custom' ? 'Custom' : 'Default';
+    const sourceDisplay = diffSource === 'staged' ? 'Staged Changes' : `Last ${commitCount} commit(s)`;
+    const extensionVersion = extensionContext?.extension?.packageJSON?.version || 'Unknown';
+
+    return `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Git AI Assistant</title>
+        <style>
+            @font-face {
+                font-family: 'codicon';
+                src: url('${webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.ttf'))}') format('truetype');
+            }
+
+            .codicon {
+                font-family: 'codicon';
+                font-size: 16px;
+                font-weight: normal;
+                font-style: normal;
+                line-height: 1;
+            }
+
+            .codicon-git-pull-request:before { content: "\\ea64"; }
+            .codicon-hubot:before { content: "\\ea8c"; }
+            .codicon-file-code:before { content: "\\ead9"; }
+            .codicon-git-compare:before { content: "\\eb29"; }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                padding: 16px;
+                margin: 0;
+                font-family: var(--vscode-font-family);
+                color: var(--vscode-foreground);
+                background-color: var(--vscode-sideBar-background);
+                font-size: 13px;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: 24px;
+            }
+
+            /* Section Headers */
+            .section-header {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--vscode-foreground);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 12px;
+                opacity: 0.7;
+            }
+
+            /* Cards */
+            .card {
+                background-color: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 8px;
+                padding: 16px;
+                transition: box-shadow 0.2s ease;
+            }
+
+            .card:hover {
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
+
+            .card-content {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .card-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 4px;
+            }
+
+            .card-icon {
+                width: 20px;
+                height: 20px;
+                flex-shrink: 0;
+                color: var(--vscode-foreground);
+            }
+
+            .card-title {
+                font-size: 14px;
+                font-weight: 500;
+                color: var(--vscode-foreground);
+            }
+
+            .card-description {
+                font-size: 12px;
+                color: var(--vscode-descriptionForeground);
+                line-height: 1.5;
+                margin-bottom: 8px;
+            }
+
+            /* Buttons */
+            .button {
+                width: 100%;
+                padding: 10px 16px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                transition: all 0.2s ease;
+                font-family: var(--vscode-font-family);
+            }
+
+            .button-primary {
+                background-color: #16825d;
+                color: #ffffff;
+                height: 40px;
+            }
+
+            .button-primary:hover {
+                background-color: #0e6245;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            }
+
+            .button-primary:active {
+                transform: translateY(0);
+            }
+
+            .button-outlined {
+                background-color: transparent;
+                color: var(--vscode-button-secondaryForeground);
+                border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+                height: 36px;
+            }
+
+            .button-outlined:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            /* List Items */
+            .list-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 8px 0;
+            }
+
+            .list-item-icon {
+                width: 16px;
+                height: 16px;
+                flex-shrink: 0;
+                color: var(--vscode-foreground);
+                opacity: 0.8;
+            }
+
+            .list-item-content {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .list-item-label {
+                font-size: 12px;
+                font-weight: 500;
+                color: var(--vscode-foreground);
+            }
+
+            .list-item-value {
+                font-size: 12px;
+                color: var(--vscode-descriptionForeground);
+                margin-top: 2px;
+            }
+
+            /* Status Chips */
+            .status-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 500;
+                white-space: nowrap;
+            }
+
+            .status-chip.success {
+                background-color: rgba(40, 167, 69, 0.15);
+                color: #28a745;
+            }
+
+            .status-chip.error {
+                background-color: rgba(220, 53, 69, 0.15);
+                color: #dc3545;
+            }
+
+            .status-chip.warning {
+                background-color: rgba(255, 193, 7, 0.15);
+                color: #ffc107;
+            }
+
+            .status-indicator {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                display: inline-block;
+            }
+
+            .status-indicator.success {
+                background-color: #28a745;
+            }
+
+            .status-indicator.error {
+                background-color: #dc3545;
+            }
+
+            .status-indicator.warning {
+                background-color: #ffc107;
+            }
+
+            /* Divider */
+            .divider {
+                height: 1px;
+                background-color: var(--vscode-panel-border);
+                margin: 8px 0;
+            }
+
+            /* Config Grid */
+            .config-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .config-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 12px;
+                background-color: var(--vscode-input-background);
+                border-radius: 4px;
+                font-size: 12px;
+            }
+
+            .config-label {
+                color: var(--vscode-foreground);
+                font-weight: 500;
+            }
+
+            .config-value {
+                color: var(--vscode-descriptionForeground);
+                text-align: right;
+            }
+
+            /* Status List */
+            .status-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .status-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+
+            .status-label {
+                color: var(--vscode-foreground);
+            }
+
+            .status-value {
+                margin-left: auto;
+                color: var(--vscode-descriptionForeground);
+                font-size: 11px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <!-- Quick Actions Section -->
+            <section>
+                <div class="section-header">QUICK ACTIONS</div>
+                <div class="card">
+                    <div class="card-content">
+                        <div class="card-header">
+                            <i class="codicon codicon-git-pull-request card-icon"></i>
+                            <div class="card-title">Generate PR Description</div>
+                        </div>
+                        <div class="card-description">
+                            Create AI-powered pull request descriptions from your changes
+                        </div>
+                        <button class="button button-primary" id="generateBtn">
+                            <i class="codicon codicon-git-pull-request"></i>
+                            <span>Generate</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Configuration Section -->
+            <section>
+                <div class="section-header">CONFIGURATION</div>
+                <div class="card">
+                    <div class="card-content">
+                        <div class="list-item">
+                            <i class="codicon codicon-hubot list-item-icon"></i>
+                            <div class="list-item-content">
+                                <div class="list-item-label">AI Model</div>
+                                <div class="list-item-value">${modelDisplay}</div>
+                            </div>
+                            <span class="status-chip ${modelStatus}">
+                                <span class="status-indicator ${modelStatus}"></span>
+                                ${modelStatus === 'success' ? 'Ready' : modelStatus === 'error' ? 'Not Set' : 'Warning'}
+                            </span>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="config-label">📄 Template</span>
+                                <span class="config-value">${templateDisplay}</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="config-label">📊 Source</span>
+                                <span class="config-value">${sourceDisplay}</span>
+                            </div>
+                        </div>
+
+                        <button class="button button-outlined" id="configureBtn">
+                            Configure Settings
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Status Section -->
+            <section>
+                <div class="section-header">SERVICE STATUS</div>
+                <div class="card">
+                    <div class="card-content">
+                        <div class="status-list">
+                            <div class="status-item">
+                                <span class="status-indicator ${copilotStatusClass}"></span>
+                                <span class="status-label">GitHub Copilot</span>
+                                <span class="status-value">${copilotStatus}</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-indicator success"></span>
+                                <span class="status-label">Extension</span>
+                                <span class="status-value">v${extensionVersion}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <script>

@@ -1,25 +1,21 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- Outer hexagon -->
-    <path d="M12 2L20.7846 7V17L12 22L3.21539 17V7L12 2Z" 
-          stroke="currentColor" 
-          stroke-width="1.5" 
-          stroke-linejoin="round"
-          fill="none" />
-    
-    <!-- Inner geometric pattern -->
-    <path d="M12 7L16.3923 9.5V14.5L12 17L7.60769 14.5V9.5L12 7Z" 
-          stroke="currentColor" 
-          stroke-width="1.5" 
-          stroke-linejoin="round"
-          fill="none" />
-    
-    <!-- Central dot -->
-    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-    
-    <!-- Connecting lines -->
-    <path d="M12 7V4M12 20V17M7.60769 9.5L5 8M19 8L16.3923 9.5M7.60769 14.5L5 16M19 16L16.3923 14.5" 
-          stroke="currentColor" 
-          stroke-width="1.5" 
-          stroke-linecap="round" />
-</svg> 
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="256" height="256" rx="32" fill="#1F1F1F"></rect>
+
+  <!-- The G (geometric, Google-style proportions) -->
+  <path d="M128 56
+           c-40 0 -72 32 -72 72s32 72 72 72
+           c28 0 52 -15 64 -38h-64v-32h96
+           c1 6 2 12 2 18c0 48 -38 86 -98 86
+           c-56 0 -102 -46 -102 -102s46 -102 102 -102
+           c43 0 80 27 94 64h-36
+           c-12 -22 -34 -38 -58 -38z" fill="#FFFFFF" opacity="0.92"></path>
+
+  <!-- Git nodes (Material minimal dots) -->
+  <circle cx="92" cy="92" r="10" fill="#FF5722"></circle>
+  <circle cx="164" cy="128" r="10" fill="#FF5722"></circle>
+  <circle cx="92" cy="164" r="10" fill="#FF5722"></circle>
+
+  <!-- Git connecting line (Material thick stroke) -->
+  <path d="M92 92L164 128L92 164" stroke="#FF5722" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
