@@ -8,4 +8,5 @@ dist/
 .cursor/
 coverage/
 .nyc_output/
-*.log 
+*.log
+.claude/

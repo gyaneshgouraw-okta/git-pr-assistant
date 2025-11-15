@@ -31,6 +31,15 @@
           "id": "gitAIAssistantPanel",
           "name": "Git AI Assistant"
         }
+      ],
+      "scm": [
+        {
+          "type": "webview",
+          "id": "gitAIAssistantSCMView",
+          "name": "PR Assistant",
+          "contextualTitle": "PR Assistant",
+          "visibility": "visible"
+        }
       ]
     },
     "viewsWelcome": [
@@ -78,13 +87,19 @@
         },
         "gitAIAssistant.templateSource": {
           "type": "string",
-          "enum": ["custom", "default"],
+          "enum": [
+            "custom",
+            "default"
+          ],
           "default": "default",
           "description": "Source for PR template: custom (stored in extension) or default (built-in template)"
         },
         "gitAIAssistant.diffSource": {
           "type": "string",
-          "enum": ["staged", "commits"],
+          "enum": [
+            "staged",
+            "commits"
+          ],
           "default": "staged",
           "description": "Source for the git diff: staged changes or recent commits"
         },
@@ -130,6 +145,7 @@
     "@types/vscode": "^1.60.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^2.24.0",
     "chai": "^4.3.7",
     "dotenv": "^16.4.7",
@@ -144,8 +160,6 @@
     "vscode-test": "^1.6.1",
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1"
-  },
-  "dependencies": {
   },
   "publisher": "gyaneshgouraw",
   "repository": {

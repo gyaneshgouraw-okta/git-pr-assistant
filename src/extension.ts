@@ -39,6 +39,12 @@ export function activate(context: vscode.ExtensionContext) {
   const treeDataProvider = new GitAIAssistantProvider();
   vscode.window.registerTreeDataProvider('gitAIAssistantPanel', treeDataProvider);
 
+  // Register the SCM webview provider
+  const scmWebviewProvider = new SCMWebviewProvider(context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('gitAIAssistantSCMView', scmWebviewProvider)
+  );
+
   // Register the command for the unified provider configuration
   const configureProviderCommand = vscode.commands.registerCommand('git-ai-assistant.configureProvider', async () => {
     console.log('Configure AI Provider command triggered');
@@ -849,6 +855,193 @@ async function checkCopilotAvailability() {
     vscode.window.showWarningMessage(
       'Unable to verify GitHub Copilot availability. Some features may not work correctly.'
     );
+  }
+}
+
+/**
+ * Webview view provider for the SCM panel
+ */
+class SCMWebviewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly _extensionUri: vscode.Uri) {}
+
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri]
+    };
+
+    webviewView.webview.html = this.getHtmlContent(webviewView.webview);
+
+    // Handle messages from the webview
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      switch (message.command) {
+        case 'generatePR':
+          vscode.commands.executeCommand('git-ai-assistant.generatePRDescription');
+          break;
+        case 'configure':
+          vscode.commands.executeCommand('git-ai-assistant.configureProvider');
+          break;
+      }
+    });
+
+    // Update content when configuration changes
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('gitAIAssistant')) {
+        webviewView.webview.html = this.getHtmlContent(webviewView.webview);
+      }
+    });
+  }
+
+  private getHtmlContent(webview: vscode.Webview): string {
+    // Get current configuration
+    const config = vscode.workspace.getConfiguration('gitAIAssistant');
+    const copilotModelId = config.get<string>('copilotModelId', '');
+    const diffSource = config.get<string>('diffSource', 'staged');
+    const commitCount = config.get<number>('commitCount', 1);
+
+    let sourceText = diffSource === 'staged' ? 'Staged changes' : `Last ${commitCount} commit(s)`;
+
+    return `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Git AI Assistant</title>
+        <style>
+            @font-face {
+                font-family: 'codicon';
+                src: url('${webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.ttf'))}') format('truetype');
+            }
+
+            .codicon {
+                font-family: 'codicon';
+                font-size: 16px;
+                font-weight: normal;
+                font-style: normal;
+            }
+
+            body {
+                padding: 12px 16px;
+                margin: 0;
+                font-family: var(--vscode-font-family);
+                color: var(--vscode-foreground);
+            }
+
+            .button-primary {
+                width: 100%;
+                padding: 8px 14px;
+                background-color: #16825d;
+                color: #ffffff;
+                border: none;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                transition: background-color 0.1s ease;
+            }
+
+            .button-primary:hover {
+                background-color: #0e6245;
+            }
+
+            .button-primary:active {
+                transform: translateY(1px);
+            }
+
+            .button-secondary {
+                width: 100%;
+                padding: 6px 14px;
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                border: none;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 12px;
+                text-align: center;
+                margin-top: 8px;
+                transition: background-color 0.1s ease;
+            }
+
+            .button-secondary:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            .info-section {
+                margin-top: 12px;
+                padding: 8px;
+                background-color: var(--vscode-textBlockQuote-background);
+                border-left: 3px solid var(--vscode-textBlockQuote-border);
+                font-size: 11px;
+                color: var(--vscode-descriptionForeground);
+            }
+
+            .info-row {
+                display: flex;
+                justify-content: space-between;
+                margin: 4px 0;
+            }
+
+            .info-label {
+                font-weight: 500;
+            }
+
+            .icon {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <button class="button-primary" id="generateBtn" title="Generate PR description using AI">
+            <span class="codicon">&#xea64;</span>
+            <span>Generate PR Description</span>
+        </button>
+
+        <button class="button-secondary" id="configureBtn" title="Configure AI model and template">
+            Configure Settings
+        </button>
+
+        <div class="info-section">
+            <div class="info-row">
+                <span class="info-label">Source:</span>
+                <span>${sourceText}</span>
+            </div>
+            ${copilotModelId ? `
+            <div class="info-row">
+                <span class="info-label">AI Model:</span>
+                <span>Configured ✓</span>
+            </div>
+            ` : `
+            <div class="info-row">
+                <span class="info-label">AI Model:</span>
+                <span style="color: var(--vscode-errorForeground);">Not configured</span>
+            </div>
+            `}
+        </div>
+
+        <script>
+            const vscode = acquireVsCodeApi();
+
+            document.getElementById('generateBtn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'generatePR' });
+            });
+
+            document.getElementById('configureBtn').addEventListener('click', () => {
+                vscode.postMessage({ command: 'configure' });
+            });
+        </script>
+    </body>
+    </html>`;
   }
 }
 
