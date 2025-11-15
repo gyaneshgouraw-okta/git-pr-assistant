@@ -276,6 +276,16 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 /**
+ * Tree item types for the sidebar view
+ */
+enum TreeItemType {
+  Section = 'section',
+  Action = 'action',
+  ConfigItem = 'configItem',
+  StatusItem = 'statusItem'
+}
+
+/**
  * Tree data provider for the sidebar view
  */
 class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
@@ -291,14 +301,85 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
   }
 
   async getChildren(element?: TreeItem): Promise<TreeItem[]> {
-    if (element) {
-      return Promise.resolve([]);
+    // Root level: Return section headers
+    if (!element) {
+      return Promise.resolve([
+        new TreeItem(
+          'ACTIONS',
+          'Quick actions for generating content',
+          vscode.TreeItemCollapsibleState.Expanded,
+          TreeItemType.Section,
+          undefined,
+          'symbol-event'
+        ),
+        new TreeItem(
+          'CONFIGURATION',
+          'Current extension settings',
+          vscode.TreeItemCollapsibleState.Expanded,
+          TreeItemType.Section,
+          undefined,
+          'settings-gear'
+        ),
+        new TreeItem(
+          'STATUS',
+          'Extension and service status',
+          vscode.TreeItemCollapsibleState.Collapsed,
+          TreeItemType.Section,
+          undefined,
+          'info'
+        )
+      ]);
     }
 
-    // Get the current configuration
+    // Get configuration
+    const config = vscode.workspace.getConfiguration('gitAIAssistant');
+
+    // Return children based on section
+    switch (element.label) {
+      case 'ACTIONS':
+        return this.getActionItems();
+
+      case 'CONFIGURATION':
+        return this.getConfigurationItems();
+
+      case 'STATUS':
+        return this.getStatusItems();
+
+      default:
+        return Promise.resolve([]);
+    }
+  }
+
+  /**
+   * Get action items (child nodes under ACTIONS section)
+   */
+  private async getActionItems(): Promise<TreeItem[]> {
+    return [
+      new TreeItem(
+        'Generate PR Description',
+        'Create a PR description from staged changes or recent commits',
+        vscode.TreeItemCollapsibleState.None,
+        TreeItemType.Action,
+        {
+          command: 'git-ai-assistant.generatePRDescription',
+          title: 'Generate PR Description',
+          arguments: []
+        },
+        'git-pull-request',
+        'Click to generate'
+      )
+    ];
+  }
+
+  /**
+   * Get configuration items (child nodes under CONFIGURATION section)
+   */
+  private async getConfigurationItems(): Promise<TreeItem[]> {
     const config = vscode.workspace.getConfiguration('gitAIAssistant');
     const copilotModelId = config.get<string>('copilotModelId', '');
     const templateSource = config.get<string>('templateSource', 'default');
+    const diffSource = config.get<string>('diffSource', 'staged');
+    const commitCount = config.get<number>('commitCount', 1);
 
     // Get model display name
     let modelDisplay = 'No model selected';
@@ -315,37 +396,119 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
       }
     }
 
-    // Format the template source for display
-    let templateDisplay = 'Default';
-    if (templateSource === 'custom') {
-      templateDisplay = 'Custom';
-    }
+    // Format displays
+    const templateDisplay = templateSource === 'custom' ? 'Custom' : 'Default';
+    const sourceDisplay = diffSource === 'commits'
+      ? `Recent commits (${commitCount})`
+      : 'Staged changes';
 
-    // Create the root elements
-    return Promise.resolve([
+    return [
       new TreeItem(
-        'Generate PR Description',
-        'Click to generate a PR description using GitHub Copilot',
+        `AI Model: ${modelDisplay}`,
+        'Click to change the Copilot model',
         vscode.TreeItemCollapsibleState.None,
-        {
-          command: 'git-ai-assistant.generatePRDescription',
-          title: 'Generate PR Description',
-          arguments: []
-        },
-        'git-pull-request'
-      ),
-      new TreeItem(
-        `Configure Settings (Model: ${modelDisplay}, Template: ${templateDisplay})`,
-        'Configure Copilot model and template settings',
-        vscode.TreeItemCollapsibleState.None,
+        TreeItemType.ConfigItem,
         {
           command: 'git-ai-assistant.configureProvider',
-          title: 'Configure Settings',
+          title: 'Configure AI Model',
           arguments: []
         },
-        'gear'
+        'hubot',
+        'Click to configure'
+      ),
+      new TreeItem(
+        `Template: ${templateDisplay}`,
+        'Click to edit or change the PR template',
+        vscode.TreeItemCollapsibleState.None,
+        TreeItemType.ConfigItem,
+        {
+          command: 'git-ai-assistant.configureProvider',
+          title: 'Configure Template',
+          arguments: []
+        },
+        'file-code',
+        'Click to configure'
+      ),
+      new TreeItem(
+        `Source: ${sourceDisplay}`,
+        'Click to change diff source (staged changes or recent commits)',
+        vscode.TreeItemCollapsibleState.None,
+        TreeItemType.ConfigItem,
+        {
+          command: 'git-ai-assistant.configureProvider',
+          title: 'Configure Source',
+          arguments: []
+        },
+        'git-compare',
+        'Click to configure'
       )
-    ]);
+    ];
+  }
+
+  /**
+   * Get status items (child nodes under STATUS section)
+   */
+  private async getStatusItems(): Promise<TreeItem[]> {
+    const items: TreeItem[] = [];
+
+    // Check Copilot availability
+    try {
+      const isAvailable = await CopilotAIService.isCopilotAvailable();
+
+      if (isAvailable) {
+        items.push(
+          new TreeItem(
+            'GitHub Copilot: Ready',
+            'GitHub Copilot is available and ready to use',
+            vscode.TreeItemCollapsibleState.None,
+            TreeItemType.StatusItem,
+            undefined,
+            'pass',
+            'Active subscription detected'
+          )
+        );
+      } else {
+        items.push(
+          new TreeItem(
+            'GitHub Copilot: Not Available',
+            'GitHub Copilot subscription required',
+            vscode.TreeItemCollapsibleState.None,
+            TreeItemType.StatusItem,
+            undefined,
+            'error',
+            'Click to learn more'
+          )
+        );
+      }
+    } catch (error) {
+      items.push(
+        new TreeItem(
+          'GitHub Copilot: Unknown',
+          'Unable to verify Copilot availability',
+          vscode.TreeItemCollapsibleState.None,
+          TreeItemType.StatusItem,
+          undefined,
+          'warning',
+          'Check your connection'
+        )
+      );
+    }
+
+    // Add extension version
+    const extensionVersion = extensionContext?.extension?.packageJSON?.version || 'Unknown';
+    items.push(
+      new TreeItem(
+        `Version: ${extensionVersion}`,
+        'Current extension version',
+        vscode.TreeItemCollapsibleState.None,
+        TreeItemType.StatusItem,
+        undefined,
+        'versions',
+        ''
+      )
+    );
+
+    return items;
   }
 }
 
@@ -357,19 +520,25 @@ class TreeItem extends vscode.TreeItem {
     public readonly label: string,
     public readonly tooltip: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly itemType: TreeItemType,
     public readonly command?: vscode.Command,
-    iconName?: string
+    iconName?: string,
+    description?: string
   ) {
     super(label, collapsibleState);
     this.tooltip = tooltip;
-    
+    this.description = description;
+
     if (command) {
       this.command = command;
     }
-    
+
     if (iconName) {
       this.iconPath = new vscode.ThemeIcon(iconName);
     }
+
+    // Apply context value for conditional menu items (if needed in future)
+    this.contextValue = itemType;
   }
 }
 

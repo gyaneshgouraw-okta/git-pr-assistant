@@ -36,7 +36,7 @@
     "viewsWelcome": [
       {
         "view": "gitAIAssistantPanel",
-        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure Settings](command:git-ai-assistant.configureProvider)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)"
+        "contents": "# Welcome to Git AI Assistant\n\nGenerate high-quality PR descriptions using GitHub Copilot's AI models.\n\n## Getting Started\n\n**Prerequisites:**\n• Active GitHub Copilot subscription\n• VS Code with Copilot extension installed\n\n**Quick Start:**\n\n1. [Configure AI Model](command:git-ai-assistant.configureProvider) - Select your preferred Copilot model\n2. Stage your changes with `git add`\n3. [Generate PR Description](command:git-ai-assistant.generatePRDescription) - Create AI-powered description\n\n---\n\n[📖 Configure Settings](command:git-ai-assistant.configureProvider)\n\n[✨ Generate PR Description](command:git-ai-assistant.generatePRDescription)"
       }
     ],
     "commands": [
