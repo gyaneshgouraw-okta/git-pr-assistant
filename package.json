@@ -36,7 +36,7 @@
     "viewsWelcome": [
       {
         "view": "gitAIAssistantPanel",
-        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure Settings](command:git-ai-assistant.configureProvider)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)\n[Test Command](command:git-ai-assistant.testCommand)"
+        "contents": "Generate PR descriptions and commit messages using AI.\n[Configure Settings](command:git-ai-assistant.configureProvider)\n[Generate PR Description](command:git-ai-assistant.generatePRDescription)"
       }
     ],
     "commands": [
@@ -47,10 +47,6 @@
       {
         "command": "git-ai-assistant.configureProvider",
         "title": "Configure Settings"
-      },
-      {
-        "command": "git-ai-assistant.testCommand",
-        "title": "Git AI Assistant: Test Command"
       }
     ],
     "menus": {
@@ -69,10 +65,6 @@
         {
           "command": "git-ai-assistant.configureProvider",
           "when": "true"
-        },
-        {
-          "command": "git-ai-assistant.testCommand",
-          "when": "true"
         }
       ]
     },
@@ -84,21 +76,11 @@
           "default": "",
           "description": "Selected GitHub Copilot model ID for generating PR descriptions"
         },
-        "gitAIAssistant.useRepoTemplate": {
-          "type": "boolean",
-          "default": true,
-          "description": "Use PR template from repository if available"
-        },
         "gitAIAssistant.templateSource": {
           "type": "string",
           "enum": ["custom", "default"],
           "default": "default",
           "description": "Source for PR template: custom (stored in extension) or default (built-in template)"
-        },
-        "gitAIAssistant.defaultPRTemplate": {
-          "type": "string",
-          "default": "## Summary\n\n## Changes\n\n## Testing\n\n## Screenshots\n\n",
-          "description": "Default PR template to use when no repository template is found"
         },
         "gitAIAssistant.diffSource": {
           "type": "string",
@@ -137,7 +119,7 @@
     "esbuild": "node esbuild.js",
     "esbuild:watch": "node esbuild.js --watch",
     "build": "npm run compile && npm run package",
-    "uninstall": "rm -rf git-ai-assistant-0.1.0.vsix && node scripts/uninstall-extension.js"
+    "uninstall": "rm -rf git-ai-assistant-0.4.0.vsix && node scripts/uninstall-extension.js"
   },
   "devDependencies": {
     "@types/chai": "^4.3.3",

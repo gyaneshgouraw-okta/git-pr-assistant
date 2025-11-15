@@ -5,6 +5,22 @@ const execAsync = promisify(exec);
 
 export class GitDiffReader {
   /**
+   * Get the workspace folder path to use as cwd for git commands
+   */
+  private getWorkspaceCwd(): string | undefined {
+    try {
+      if (require('vscode').workspace.workspaceFolders?.length > 0) {
+        const cwd = require('vscode').workspace.workspaceFolders[0].uri.fsPath;
+        console.log('Using workspace folder as cwd:', cwd);
+        return cwd;
+      }
+    } catch (e) {
+      console.log('Error getting workspace folder:', (e as Error).message);
+    }
+    return undefined;
+  }
+
+  /**
    * Get the git diff based on the configured source (staged changes or recent commits)
    * @param diffSource Source of the diff: 'staged' or 'commits'
    * @param commitCount Number of recent commits to include when source is 'commits'
@@ -77,18 +93,8 @@ export class GitDiffReader {
   private async getUnstagedDiff(): Promise<string> {
     try {
       console.log('Running git diff command...');
-      
-      // Get workspace folder to use as cwd
-      let cwd = undefined;
-      try {
-        if (require('vscode').workspace.workspaceFolders?.length > 0) {
-          cwd = require('vscode').workspace.workspaceFolders[0].uri.fsPath;
-          console.log('Using workspace folder as cwd:', cwd);
-        }
-      } catch (e) {
-        console.log('Error getting workspace folder:', (e as Error).message);
-      }
-      
+      const cwd = this.getWorkspaceCwd();
+
       const { stdout } = await execAsync('git diff', { cwd });
       console.log(`Unstaged diff command returned ${stdout.length} characters`);
       return stdout;
@@ -104,18 +110,8 @@ export class GitDiffReader {
   private async getStagedDiff(): Promise<string> {
     try {
       console.log('Running git diff --staged command...');
-      
-      // Get workspace folder to use as cwd
-      let cwd = undefined;
-      try {
-        if (require('vscode').workspace.workspaceFolders?.length > 0) {
-          cwd = require('vscode').workspace.workspaceFolders[0].uri.fsPath;
-          console.log('Using workspace folder as cwd:', cwd);
-        }
-      } catch (e) {
-        console.log('Error getting workspace folder:', (e as Error).message);
-      }
-      
+      const cwd = this.getWorkspaceCwd();
+
       const { stdout } = await execAsync('git diff --staged', { cwd });
       console.log(`Staged diff command returned ${stdout.length} characters`);
       return stdout;
@@ -132,24 +128,14 @@ export class GitDiffReader {
   private async getCommitDiff(count: number): Promise<string> {
     try {
       console.log(`Running git diff for last ${count} commits...`);
-      
-      // Get workspace folder to use as cwd
-      let cwd = undefined;
-      try {
-        if (require('vscode').workspace.workspaceFolders?.length > 0) {
-          cwd = require('vscode').workspace.workspaceFolders[0].uri.fsPath;
-          console.log('Using workspace folder as cwd:', cwd);
-        }
-      } catch (e) {
-        console.log('Error getting workspace folder:', (e as Error).message);
-      }
-      
+      const cwd = this.getWorkspaceCwd();
+
       // Create the command to get diffs for the specified number of commits
       // HEAD~N..HEAD gets the diff between N commits ago and current HEAD
-      const command = count === 1 
+      const command = count === 1
         ? 'git show HEAD --patch'  // For single commit, use git show which is more detailed
         : `git diff HEAD~${count}..HEAD`;  // For multiple commits
-      
+
       console.log(`Executing command: ${command}`);
       const { stdout } = await execAsync(command, { cwd });
       console.log(`Commit diff command returned ${stdout.length} characters`);
@@ -158,36 +144,5 @@ export class GitDiffReader {
       console.error('Error in getCommitDiff:', (error as Error).message);
       throw new Error(`Failed to get commit diff: ${(error as Error).message}`);
     }
-  }
-  
-  /**
-   * Get a sample diff when no git diff is available
-   */
-  private getSampleDiff(): string {
-    return `
-diff --git a/src/components/Button.js b/src/components/Button.js
-index 1234567..abcdefg 100644
---- a/src/components/Button.js
-+++ b/src/components/Button.js
-@@ -10,7 +10,7 @@ class Button extends Component {
-  
-  render() {
-    return (
--      <button className="btn" onClick={this.handleClick}>
-+      <button className="btn btn-primary" onClick={this.handleClick} aria-label={this.props.label}>
-        {this.props.children}
-      </button>
-    );
-@@ -18,6 +18,10 @@ class Button extends Component {
-  
-  handleClick = (e) => {
-    console.log('Button clicked');
-+    if (this.props.onClick) {
-+      this.props.onClick(e);
-+    }
-+    
-+    this.trackAnalytics('button_click');
-  }
-}`;
   }
 } 

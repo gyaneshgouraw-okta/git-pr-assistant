@@ -1,18 +1,4 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-
-/**
- * Common locations for PR templates in repositories
- */
-const PR_TEMPLATE_PATHS = [
-  '.github/PULL_REQUEST_TEMPLATE.md',
-  '.github/pull_request_template.md',
-  'docs/PULL_REQUEST_TEMPLATE.md',
-  'docs/pull_request_template.md',
-  'PULL_REQUEST_TEMPLATE.md',
-  'pull_request_template.md',
-];
 
 /**
  * Template source types
@@ -108,32 +94,5 @@ export class TemplateManager {
    */
   getDefaultTemplate(): string {
     return this.DEFAULT_TEMPLATE;
-  }
-
-  /**
-   * Find a PR template in the current repository
-   * @returns The template content if found, null otherwise
-   */
-  private async findRepoTemplate(workspaceFolder: vscode.WorkspaceFolder): Promise<string | undefined> {
-    const commonTemplatePaths = [
-      path.join(workspaceFolder.uri.fsPath, '.github', 'pull_request_template.md'),
-      path.join(workspaceFolder.uri.fsPath, '.github', 'PULL_REQUEST_TEMPLATE.md'),
-      path.join(workspaceFolder.uri.fsPath, '.github', 'PULL_REQUEST_TEMPLATE'),
-      path.join(workspaceFolder.uri.fsPath, 'docs', '.github', 'pull_request_template.md'),
-      path.join(workspaceFolder.uri.fsPath, 'docs', '.github', 'PULL_REQUEST_TEMPLATE.md'),
-      path.join(workspaceFolder.uri.fsPath, '.github', 'PULL_REQUEST_TEMPLATE', 'pull_request_template.md')
-    ];
-
-    for (const templatePath of commonTemplatePaths) {
-      try {
-        if (fs.existsSync(templatePath)) {
-          return fs.readFileSync(templatePath, 'utf8');
-        }
-      } catch (error) {
-        console.error(`Error reading template at ${templatePath}:`, error);
-      }
-    }
-
-    return undefined;
   }
 } 

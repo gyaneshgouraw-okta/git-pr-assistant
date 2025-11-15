@@ -39,32 +39,6 @@ export function activate(context: vscode.ExtensionContext) {
   const treeDataProvider = new GitAIAssistantProvider();
   vscode.window.registerTreeDataProvider('gitAIAssistantPanel', treeDataProvider);
 
-  // Log all registered commands
-  vscode.commands.getCommands(true).then((commands) => {
-    console.log('All registered commands:', commands);
-    
-    // Test if our commands are already registered
-    const ourCommands = [
-      'git-ai-assistant.configureAWS',
-      'git-ai-assistant.configureGoogle',
-      'git-ai-assistant.configureProvider',
-      'git-ai-assistant.generatePRDescription',
-      'git-ai-assistant.testCommand'
-    ];
-    
-    for (const cmd of ourCommands) {
-      console.log(`Command ${cmd} registered: ${commands.includes(cmd)}`);
-    }
-  });
-
-  // Add a simple test command to verify command registration is working
-  const testCommand = vscode.commands.registerCommand('git-ai-assistant.testCommand', () => {
-    console.log('Test command triggered');
-    vscode.window.showInformationMessage('Git AI Assistant test command works!');
-  });
-  context.subscriptions.push(testCommand);
-  console.log('Registered test command: git-ai-assistant.testCommand');
-
   // Register the command for the unified provider configuration
   const configureProviderCommand = vscode.commands.registerCommand('git-ai-assistant.configureProvider', async () => {
     console.log('Configure AI Provider command triggered');
@@ -98,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
         // Set webview HTML content (async)
         providerConfigPanel.webview.html = await getProviderConfigWebviewContent(
           copilotModelId,
-          config.get<string>('templateSource', 'repository'),
+          config.get<string>('templateSource', 'default'),
           templateManager.getCustomTemplate() || '',
           config.get<string>('defaultTemplate', '')
         );
@@ -296,7 +270,6 @@ export function activate(context: vscode.ExtensionContext) {
   
   // Expose a public API
   return {
-    testCommand: () => vscode.commands.executeCommand('git-ai-assistant.testCommand'),
     configureProvider: () => vscode.commands.executeCommand('git-ai-assistant.configureProvider'),
     generatePRDescription: () => vscode.commands.executeCommand('git-ai-assistant.generatePRDescription')
   };
@@ -670,7 +643,7 @@ async function updateProviderConfigPanel() {
 
   const config = vscode.workspace.getConfiguration('gitAIAssistant');
   const copilotModelId = config.get<string>('copilotModelId', '');
-  const templateSource = config.get<string>('templateSource', 'repository');
+  const templateSource = config.get<string>('templateSource', 'default');
   const defaultTemplate = config.get<string>('defaultTemplate', '');
   const customTemplate = templateManager.getCustomTemplate() || '';
 
