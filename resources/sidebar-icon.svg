@@ -1,21 +1,7 @@
-<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background -->
-  <rect width="256" height="256" rx="32" fill="#1F1F1F"></rect>
-
-  <!-- The G (geometric, Google-style proportions) -->
-  <path d="M128 56
-           c-40 0 -72 32 -72 72s32 72 72 72
-           c28 0 52 -15 64 -38h-64v-32h96
-           c1 6 2 12 2 18c0 48 -38 86 -98 86
-           c-56 0 -102 -46 -102 -102s46 -102 102 -102
-           c43 0 80 27 94 64h-36
-           c-12 -22 -34 -38 -58 -38z" fill="#FFFFFF" opacity="0.92"></path>
-
-  <!-- Git nodes (Material minimal dots) -->
-  <circle cx="92" cy="92" r="10" fill="#FF5722"></circle>
-  <circle cx="164" cy="128" r="10" fill="#FF5722"></circle>
-  <circle cx="92" cy="164" r="10" fill="#FF5722"></circle>
-
-  <!-- Git connecting line (Material thick stroke) -->
-  <path d="M92 92L164 128L92 164" stroke="#FF5722" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="100" cy="100" r="70" fill="#007ACC"/>
+  <path d="M100 30L120 70L170 80L140 120L150 170L100 150L50 170L60 120L30 80L80 70L100 30Z" fill="#3C9CDD"/>
+  <circle cx="100" cy="100" r="30" fill="#FFFFFF"/>
+  <path d="M100 70L130 100L100 130L70 100L100 70Z" fill="#007ACC"/>
+  <path d="M100 70L100 130M70 100L130 100" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
 </svg>

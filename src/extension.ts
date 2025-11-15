@@ -96,6 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
               case 'saveConfiguration':
                 const copilotModelId = message.copilotModelId;
                 const templateSource = message.templateSource;
+                const customTemplate = message.customTemplate || '';
                 const diffSource = message.diffSource || 'staged';
                 const commitCount = message.commitCount || 1;
 
@@ -104,34 +105,16 @@ export function activate(context: vscode.ExtensionContext) {
                 await config.update('templateSource', templateSource, vscode.ConfigurationTarget.Global);
                 await config.update('diffSource', diffSource, vscode.ConfigurationTarget.Global);
                 await config.update('commitCount', commitCount, vscode.ConfigurationTarget.Global);
-                console.log(`Saved settings - model: ${copilotModelId}, template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
 
-                vscode.window.showInformationMessage('Configuration saved successfully');
-                break;
-                
-              case 'saveCustomTemplate':
-                // Save custom template to extension global state
-                templateManager.saveCustomTemplate(message.template);
-                // Update template source to 'custom'
-                await config.update('templateSource', 'custom', vscode.ConfigurationTarget.Global);
-                console.log('Saved custom template and set template source to custom');
-                vscode.window.showInformationMessage('Custom template saved successfully');
-
-                // Refresh webview to show template source change
-                if (providerConfigPanel) {
-                  updateProviderConfigPanel();
+                // Save custom template if provided and custom is selected
+                if (templateSource === 'custom' && customTemplate) {
+                  templateManager.saveCustomTemplate(customTemplate);
                 }
-                break;
-                
-              case 'deleteCustomTemplate':
-                // Delete custom template from extension global state
-                templateManager.deleteCustomTemplate();
-                // Set template source to 'default'
-                await config.update('templateSource', 'default', vscode.ConfigurationTarget.Global);
-                console.log('Deleted custom template and set template source to default');
-                vscode.window.showInformationMessage('Custom template deleted');
-                
-                // Refresh webview
+
+                console.log(`Saved settings - model: ${copilotModelId}, template: ${templateSource}, diffSource: ${diffSource}, commitCount: ${commitCount}`);
+                vscode.window.showInformationMessage('Configuration saved successfully');
+
+                // Refresh webview to show updated state
                 if (providerConfigPanel) {
                   updateProviderConfigPanel();
                 }
@@ -589,153 +572,369 @@ async function getProviderConfigWebviewContent(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Git AI Assistant Configuration</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: var(--vscode-font-family);
+            padding: 32px 48px;
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+            font-size: 13px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 32px;
+            color: var(--vscode-foreground);
+            letter-spacing: -0.5px;
+        }
+
+        /* Info Banner */
+        .info-banner {
+            background-color: rgba(255, 193, 7, 0.15);
+            border-left: 3px solid #ffc107;
+            padding: 16px 20px;
+            margin-bottom: 32px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .info-banner strong {
+            font-weight: 600;
+        }
+
+        /* Two Column Grid */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .card-left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .card-right-column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Cards */
+        .card {
+            background-color: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
             padding: 20px;
+            transition: box-shadow 0.2s ease;
+            height: fit-content;
+        }
+
+        .card:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
             color: var(--vscode-foreground);
         }
-        .config-section {
-            margin-bottom: 30px;
-            padding: 15px;
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 5px;
+
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
+
+        /* Form Fields */
         .field {
-            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
+
         label {
-            display: block;
-            margin-bottom: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
         }
-        input, select, textarea {
+
+        select, input[type="number"], textarea {
             width: 100%;
-            padding: 8px;
-            box-sizing: border-box;
+            padding: 12px 16px;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-        }
-        input[type="radio"] {
-            width: auto;
-            margin-right: 8px;
-        }
-        .radio-label {
-            display: inline-flex;
-            align-items: center;
-            margin-right: 15px;
-        }
-        textarea {
-            min-height: 200px;
-            font-family: monospace;
-        }
-        .template-section {
-            margin-top: 30px;
-            border-top: 1px solid var(--vscode-panel-border);
-            padding-top: 20px;
-        }
-        button {
-            padding: 8px 16px;
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-        .custom-template-section {
-            margin-top: 15px;
-            padding: 15px;
             border: 1px solid var(--vscode-panel-border);
-            border-radius: 5px;
-            display: ${templateSource === 'custom' ? 'block' : 'none'};
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: var(--vscode-font-family);
+            transition: border-color 0.2s ease;
         }
-        .commit-count-field {
-            margin-top: 15px;
-            display: ${diffSource === 'commits' ? 'block' : 'none'};
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #16825d;
+            box-shadow: 0 0 0 2px rgba(22, 130, 93, 0.1);
         }
+
+        textarea {
+            min-height: 300px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            resize: vertical;
+        }
+
         .help-text {
-            margin-top: 8px;
-            font-size: 0.9em;
+            font-size: 12px;
             color: var(--vscode-descriptionForeground);
+            line-height: 1.5;
+            margin-top: 4px;
         }
-        .info-banner {
-            background-color: var(--vscode-inputValidation-infoBackground);
-            border: 1px solid var(--vscode-inputValidation-infoBorder);
-            padding: 12px;
-            margin-bottom: 20px;
-            border-radius: 5px;
+
+        /* Radio Buttons */
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .radio-option:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .radio-option input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            margin: 2px 0 0 0;
+            cursor: pointer;
+        }
+
+        .radio-content {
+            flex: 1;
+        }
+
+        .radio-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .radio-description {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            line-height: 1.5;
+        }
+
+        /* Conditional Sections */
+        .conditional-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+
+        /* Buttons */
+        .button-group {
+            margin-top: 32px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .button {
+            padding: 14px 48px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            font-family: var(--vscode-font-family);
+            transition: all 0.2s ease;
+        }
+
+        .button-primary {
+            background-color: #16825d;
+            color: #ffffff;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-width: 300px;
+        }
+
+        .button-primary:hover {
+            background-color: #0e6245;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(22, 130, 93, 0.3);
+        }
+
+        .button-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Hidden by default */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Responsive for smaller screens */
+        @media (max-width: 1024px) {
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 24px 32px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Git AI Assistant Configuration</h1>
+    <div class="container">
+        <h1>Git AI Assistant Configuration</h1>
 
-    <div class="info-banner">
-        <strong>GitHub Copilot Required:</strong> This extension uses VS Code's built-in GitHub Copilot integration.
-        Please ensure you have an active Copilot subscription.
-    </div>
+        <div class="info-banner">
+            <strong>⚠️ GitHub Copilot Required:</strong> This extension uses VS Code's built-in GitHub Copilot integration. Please ensure you have an active Copilot subscription.
+        </div>
 
-    <div class="config-section">
-        <h2>Copilot Model Selection</h2>
-        <div class="field">
-            <label for="copilot-model-select">Select Copilot Model:</label>
-            <select id="copilot-model-select">
-                ${modelsDropdownOptions}
-            </select>
-            <div class="help-text">
-                Select which GitHub Copilot model to use for generating PR descriptions.
-            </div>
-        </div>
-    </div>
-    
-    <div class="diff-source-section">
-        <h2>PR Description Source</h2>
-        <div class="field">
-            <label>Diff Source:</label>
-            <div>
-                <label class="radio-label">
-                    <input type="radio" name="diff-source" value="staged" ${diffSource === 'staged' ? 'checked' : ''}>
-                    Staged Changes
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="diff-source" value="commits" ${diffSource === 'commits' ? 'checked' : ''}>
-                    Recent Commits
-                </label>
-            </div>
-        </div>
-        
-        <div id="commit-count-field" class="field commit-count-field">
-            <label for="commit-count">Number of Recent Commits:</label>
-            <input type="number" id="commit-count" value="${commitCount}" min="1" max="20" step="1">
-        </div>
-    </div>
-    
-    <div class="template-section">
-        <h2>PR Template Configuration</h2>
-        
-        <div class="field">
-            <label for="template-source">Template Source:</label>
-            <select id="template-source">
-                <option value="default" ${templateSource === 'default' ? 'selected' : ''}>Default Template</option>
-                <option value="custom" ${templateSource === 'custom' ? 'selected' : ''}>Custom Template</option>
-            </select>
-        </div>
-        
-        <div id="custom-template-section" class="custom-template-section">
-            <div class="field">
-                <label for="custom-template-content">Custom Template:</label>
-                <textarea id="custom-template-content" placeholder="Enter your custom PR template here">${customTemplate || ''}</textarea>
-            </div>
-            <div>
-                <button id="save-custom-template">Save Custom Template</button>
-                <button id="delete-custom-template">Delete Custom Template</button>
-            </div>
-        </div>
-    </div>
+        <!-- Two Column Grid Layout -->
+        <div class="cards-grid">
+            <!-- Left Column: AI Model + PR Source -->
+            <div class="card-left-column">
+                <!-- AI Model Configuration -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🤖 Copilot Model Selection</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="field">
+                            <label for="copilot-model-select">Select Copilot Model</label>
+                            <select id="copilot-model-select">
+                                ${modelsDropdownOptions}
+                            </select>
+                            <div class="help-text">
+                                Select which GitHub Copilot model to use for generating PR descriptions.
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-    <button id="save-config">Save Configuration</button>
+                <!-- PR Generation Source -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📊 Diff Source Configuration</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="field">
+                            <label>Where to get changes for PR description?</label>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="diff-source" value="staged" ${diffSource === 'staged' ? 'checked' : ''}>
+                                    <div class="radio-content">
+                                        <span class="radio-label">Staged Changes</span>
+                                        <span class="radio-description">Use changes you've staged with git add</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="diff-source" value="commits" ${diffSource === 'commits' ? 'checked' : ''}>
+                                    <div class="radio-content">
+                                        <span class="radio-label">Recent Commits</span>
+                                        <span class="radio-description">Use changes from your recent commits</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="commit-count-field" class="conditional-section ${diffSource === 'commits' ? '' : 'hidden'}">
+                            <div class="field">
+                                <label for="commit-count">Number of Recent Commits</label>
+                                <input type="number" id="commit-count" value="${commitCount}" min="1" max="20" step="1">
+                                <div class="help-text">
+                                    How many recent commits to include in the diff (1-20)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Template Management -->
+            <div class="card-right-column">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📄 Template Configuration</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="field">
+                            <label for="template-source">Which template to use for PR descriptions?</label>
+                            <select id="template-source">
+                                <option value="default" ${templateSource === 'default' ? 'selected' : ''}>Default Template</option>
+                                <option value="custom" ${templateSource === 'custom' ? 'selected' : ''}>Custom Template</option>
+                            </select>
+                            <div class="help-text">
+                                Choose between the built-in default template or create your own custom template.
+                            </div>
+                        </div>
+
+                        <div id="custom-template-section" class="conditional-section ${templateSource === 'custom' ? '' : 'hidden'}">
+                            <div class="field">
+                                <label for="custom-template-content">Custom Template Content</label>
+                                <textarea id="custom-template-content" placeholder="Enter your custom PR template here...">${customTemplate || ''}</textarea>
+                                <div class="help-text">
+                                    Enter your custom PR template markdown. Use placeholders as needed.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save Button (Full Width, Centered) -->
+        <div class="button-group">
+            <button class="button button-primary" id="save-config">
+                💾 Save Configuration
+            </button>
+        </div>
+    </div>
 
     <script>
         (function() {
@@ -747,7 +946,11 @@ async function getProviderConfigWebviewContent(
 
             templateSourceSelect.addEventListener('change', function() {
                 const source = templateSourceSelect.value;
-                customTemplateSection.style.display = source === 'custom' ? 'block' : 'none';
+                if (source === 'custom') {
+                    customTemplateSection.classList.remove('hidden');
+                } else {
+                    customTemplateSection.classList.add('hidden');
+                }
             });
 
             // Handle diff source selection
@@ -757,14 +960,19 @@ async function getProviderConfigWebviewContent(
             for (const radio of diffSourceRadios) {
                 radio.addEventListener('change', function() {
                     const source = this.value;
-                    commitCountField.style.display = source === 'commits' ? 'block' : 'none';
+                    if (source === 'commits') {
+                        commitCountField.classList.remove('hidden');
+                    } else {
+                        commitCountField.classList.add('hidden');
+                    }
                 });
             }
 
-            // Handle save configuration button
+            // Handle save configuration button (saves everything)
             document.getElementById('save-config').addEventListener('click', function() {
                 const copilotModelId = document.getElementById('copilot-model-select').value;
                 const templateSource = templateSourceSelect.value;
+                const customTemplate = document.getElementById('custom-template-content').value;
 
                 // Get selected diff source
                 let diffSource = 'staged';
@@ -778,31 +986,15 @@ async function getProviderConfigWebviewContent(
                 // Get commit count
                 const commitCount = parseInt(document.getElementById('commit-count').value, 10) || 1;
 
-                const config = {
+                // Send all configuration in one message
+                vscode.postMessage({
                     command: 'saveConfiguration',
                     copilotModelId: copilotModelId,
                     templateSource: templateSource,
+                    customTemplate: customTemplate,
                     diffSource: diffSource,
                     commitCount: commitCount
-                };
-
-                vscode.postMessage(config);
-            });
-
-            // Handle custom template actions
-            document.getElementById('save-custom-template').addEventListener('click', function() {
-                const template = document.getElementById('custom-template-content').value;
-                vscode.postMessage({
-                    command: 'saveCustomTemplate',
-                    template: template
                 });
-            });
-
-            document.getElementById('delete-custom-template').addEventListener('click', function() {
-                vscode.postMessage({
-                    command: 'deleteCustomTemplate'
-                });
-                document.getElementById('custom-template-content').value = '';
             });
         })();
     </script>
