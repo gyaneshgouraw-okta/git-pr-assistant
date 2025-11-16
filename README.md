@@ -86,7 +86,7 @@ A VS Code extension that generates PR descriptions using GitHub Copilot. No API 
 
 The extension features a modern, two-column configuration interface with responsive design. Access it by clicking "Configure Settings" from any panel.
 
-   ![Configuration](https://raw.githubusercontent.com/gyaneshgouraw-okta/git-pr-assistant/master/resources/provider-generate.gif)
+   ![Configuration](https://raw.githubusercontent.com/gyaneshgouraw-okta/git-pr-assistant/master/resources/provider-generate-1.gif)
 
 ### 🤖 Copilot Model Selection
 
