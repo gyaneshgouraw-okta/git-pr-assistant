@@ -2,7 +2,7 @@
 
 A VS Code extension that generates PR descriptions using GitHub Copilot. No API keys required - just use your existing Copilot subscription!
 
-   ![Git-Ai-Assistant](resources/final-view-2.gif)
+   ![Git-Ai-Assistant](https://gyaneshgouraw-okta.github.io/git-pr-assistant/resources/final-view-2.gif)
 
 ## ✨ Features
 
