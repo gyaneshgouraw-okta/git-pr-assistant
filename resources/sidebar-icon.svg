@@ -1,7 +1,25 @@
-<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="100" cy="100" r="70" fill="#007ACC"/>
-  <path d="M100 30L120 70L170 80L140 120L150 170L100 150L50 170L60 120L30 80L80 70L100 30Z" fill="#3C9CDD"/>
-  <circle cx="100" cy="100" r="30" fill="#FFFFFF"/>
-  <path d="M100 70L130 100L100 130L70 100L100 70Z" fill="#007ACC"/>
-  <path d="M100 70L100 130M70 100L130 100" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
-</svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Outer hexagon -->
+    <path d="M12 2L20.7846 7V17L12 22L3.21539 17V7L12 2Z" 
+          stroke="currentColor" 
+          stroke-width="1.5" 
+          stroke-linejoin="round"
+          fill="none" />
+    
+    <!-- Inner geometric pattern -->
+    <path d="M12 7L16.3923 9.5V14.5L12 17L7.60769 14.5V9.5L12 7Z" 
+          stroke="currentColor" 
+          stroke-width="1.5" 
+          stroke-linejoin="round"
+          fill="none" />
+    
+    <!-- Central dot -->
+    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    
+    <!-- Connecting lines -->
+    <path d="M12 7V4M12 20V17M7.60769 9.5L5 8M19 8L16.3923 9.5M7.60769 14.5L5 16M19 16L16.3923 14.5" 
+          stroke="currentColor" 
+          stroke-width="1.5" 
+          stroke-linecap="round" />
+</svg> 
