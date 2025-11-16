@@ -336,6 +336,4 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Made with ❤️ by the community** | **Powered by GitHub Copilot** 🤖
-
 
