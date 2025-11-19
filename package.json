@@ -2,7 +2,7 @@
   "name": "git-ai-assistant",
   "displayName": "Git AI Assistant",
   "description": "A VS Code extension that generates PR descriptions using GitHub Copilot (Copilot subscription required)",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -47,7 +47,7 @@
     "commands": [
       {
         "command": "git-ai-assistant.generatePRDescription",
-        "title": "Generate PR Description"
+        "title": "Generate PR Title & Description"
       },
       {
         "command": "git-ai-assistant.configureProvider",

@@ -4,4 +4,5 @@
  */
 export interface AIProvider {
   generatePRDescription(gitDiff: string, template: string): Promise<string>;
+  generatePRTitle(gitDiff: string): Promise<string>;
 } 

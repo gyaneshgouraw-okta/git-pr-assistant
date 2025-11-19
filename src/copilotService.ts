@@ -105,6 +105,50 @@ export class CopilotAIService implements AIProvider {
   }
 
   /**
+   * Create a prompt for the AI model to generate a PR title
+   * @param gitDiff The git diff
+   * @returns The prompt string
+   */
+  private createTitlePrompt(gitDiff: string): string {
+    const promptParts = [
+      "I need you to create a concise pull request title based on the following git diff.",
+      "The title MUST follow the Conventional Commits format:",
+      "",
+      "Format: <type>: <description>",
+      "",
+      "Types:",
+      "- feat: A new feature",
+      "- fix: A bug fix",
+      "- docs: Documentation only changes",
+      "- style: Changes that don't affect code meaning (white-space, formatting, etc)",
+      "- refactor: Code change that neither fixes a bug nor adds a feature",
+      "- perf: Performance improvement",
+      "- test: Adding missing tests or correcting existing tests",
+      "- chore: Changes to build process or auxiliary tools",
+      "",
+      "GIT DIFF:",
+      "```",
+      gitDiff,
+      "```",
+      "",
+      "Requirements:",
+      "1. Return ONLY the title, nothing else",
+      "2. Keep the description part under 50 characters if possible",
+      "3. Use lowercase for the description",
+      "4. Don't end with a period",
+      "5. Be specific and descriptive",
+      "",
+      "Example outputs:",
+      "- feat: add user authentication system",
+      "- fix: resolve memory leak in data processing",
+      "- docs: update API documentation for v2 endpoints",
+      "- refactor: simplify error handling logic"
+    ];
+
+    return promptParts.join("\n");
+  }
+
+  /**
    * Generate a PR description based on a git diff and a template using Copilot
    * @param gitDiff The git diff to describe
    * @param template The PR template to use
@@ -153,6 +197,67 @@ export class CopilotAIService implements AIProvider {
       }
 
       throw new Error(`Failed to generate PR description with Copilot: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Generate a PR title based on a git diff using Copilot
+   * @param gitDiff The git diff to analyze
+   * @returns The generated PR title in Conventional Commits format
+   */
+  async generatePRTitle(gitDiff: string): Promise<string> {
+    try {
+      console.log(`Generating PR title with Copilot model: ${this.model.name} (${this.model.id})`);
+
+      // Create the prompt
+      const prompt = this.createTitlePrompt(gitDiff);
+
+      // Create cancellation token
+      const tokenSource = new vscode.CancellationTokenSource();
+
+      // Prepare messages for the model
+      const messages = [
+        vscode.LanguageModelChatMessage.User(prompt)
+      ];
+
+      // Send request to Copilot
+      const response = await this.model.sendRequest(messages, {}, tokenSource.token);
+
+      // Process streaming response
+      let result = '';
+      for await (const chunk of response.text) {
+        result += chunk;
+      }
+
+      // Clean up
+      tokenSource.dispose();
+
+      // Clean the result - remove any markdown formatting, quotes, or extra whitespace
+      let title = result.trim();
+
+      // Remove markdown formatting if present
+      title = title.replace(/^[*_-]\s*/, '');
+      title = title.replace(/^["'`]|["'`]$/g, '');
+
+      // If the result contains multiple lines, take only the first line
+      const firstLine = title.split('\n')[0].trim();
+
+      return firstLine;
+    } catch (error) {
+      console.error(`Error generating PR title with Copilot:`, error);
+
+      // Provide more specific error messages
+      if (error instanceof vscode.LanguageModelError) {
+        if (error.code === vscode.LanguageModelError.NotFound().code) {
+          throw new Error('Copilot model not found. Please ensure you have an active GitHub Copilot subscription.');
+        } else if (error.code === vscode.LanguageModelError.Blocked().code) {
+          throw new Error('Request was blocked by Copilot. The content may have triggered safety filters.');
+        } else if (error.code === vscode.LanguageModelError.NoPermissions().code) {
+          throw new Error('No permissions to access Copilot. Please ensure you have an active GitHub Copilot subscription.');
+        }
+      }
+
+      throw new Error(`Failed to generate PR title with Copilot: ${(error as Error).message}`);
     }
   }
 }

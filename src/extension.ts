@@ -145,7 +145,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register the command for generating PR descriptions
   const generatePRCommand = vscode.commands.registerCommand('git-ai-assistant.generatePRDescription', async () => {
-    console.log('Generate PR Description command triggered');
+    console.log('Generate PR Title & Description command triggered');
     
     try {
       // Get configuration for diff source and commit count
@@ -185,7 +185,7 @@ export function activate(context: vscode.ExtensionContext) {
       // Show progress notification
       vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Generating PR Description',
+        title: 'Generating PR Title & Description',
         cancellable: false
       }, async (progress) => {
         try {
@@ -229,20 +229,30 @@ export function activate(context: vscode.ExtensionContext) {
           console.log('Creating Copilot AI service...');
           const aiService = new CopilotAIService(model);
 
-          // Use AI service to generate description
+          // Generate PR title
+          progress.report({ message: 'Generating PR title...' });
+          const title = await aiService.generatePRTitle(diff);
+          console.log('Generated PR title:', title);
+
+          // Generate PR description
+          progress.report({ message: 'Generating PR description...' });
           const description = await aiService.generatePRDescription(diff, template);
-          
-          if (description) {
-            // Create a new untitled document with the PR description
+          console.log('Generated PR description, length:', description.length);
+
+          if (title && description) {
+            // Combine title and description in a formatted document
+            const combinedContent = `# PR Title:\n${title}\n\n---\n\n${description}`;
+
+            // Create a new untitled document with the PR title and description
             const document = await vscode.workspace.openTextDocument({
-              content: description,
+              content: combinedContent,
               language: 'markdown'
             });
-            
+
             await vscode.window.showTextDocument(document);
-            vscode.window.showInformationMessage('PR Description generated successfully!');
+            vscode.window.showInformationMessage('PR Title & Description generated successfully!');
           } else {
-            vscode.window.showErrorMessage('Failed to generate PR description.');
+            vscode.window.showErrorMessage('Failed to generate PR title and description.');
           }
         } catch (error) {
           console.error('Error generating PR description:', error);
@@ -347,13 +357,13 @@ class GitAIAssistantProvider implements vscode.TreeDataProvider<TreeItem> {
   private async getActionItems(): Promise<TreeItem[]> {
     return [
       new TreeItem(
-        'Generate PR Description',
-        'Create a PR description from staged changes or recent commits',
+        'Generate PR Title & Description',
+        'Create a PR title and description from staged changes or recent commits',
         vscode.TreeItemCollapsibleState.None,
         TreeItemType.Action,
         {
           command: 'git-ai-assistant.generatePRDescription',
-          title: 'Generate PR Description',
+          title: 'Generate PR Title & Description',
           arguments: []
         },
         'git-pull-request',
@@ -1196,9 +1206,9 @@ class SCMWebviewProvider implements vscode.WebviewViewProvider {
         </style>
     </head>
     <body>
-        <button class="button-primary" id="generateBtn" title="Generate PR description using AI">
+        <button class="button-primary" id="generateBtn" title="Generate PR title and description using AI">
             <span class="codicon">&#xea64;</span>
-            <span>Generate PR Description</span>
+            <span>Generate PR Title & Description</span>
         </button>
 
         <button class="button-secondary" id="configureBtn" title="Configure AI model and template">
@@ -1621,10 +1631,10 @@ class GitAIAssistantWebviewProvider implements vscode.WebviewViewProvider {
                     <div class="card-content">
                         <div class="card-header">
                             <i class="codicon codicon-git-pull-request card-icon"></i>
-                            <div class="card-title">Generate PR Description</div>
+                            <div class="card-title">Generate PR Title & Description</div>
                         </div>
                         <div class="card-description">
-                            Create AI-powered pull request descriptions from your changes
+                            Create AI-powered pull request titles and descriptions from your changes
                         </div>
                         <button class="button button-primary" id="generateBtn">
                             <i class="codicon codicon-git-pull-request"></i>
